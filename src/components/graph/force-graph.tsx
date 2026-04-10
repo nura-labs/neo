@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { forceX, forceY, forceManyBody } from "d3-force";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
   ssr: false,
@@ -220,6 +221,18 @@ export function KnowledgeGraph() {
         onEngineStop={() => {
           if (fgRef.current) {
             fgRef.current.zoomToFit(400, 40);
+          }
+        }}
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+        onRenderFramePost={(_ctx: any, _globalScale: any) => {
+          // Configure forces once after first render
+          const fg = fgRef.current as any;
+          if (fg && !fg.__forcesConfigured) {
+            fg.d3Force("charge", forceManyBody().strength(-30).distanceMax(150));
+            fg.d3Force("centerX", forceX(0).strength(0.08));
+            fg.d3Force("centerY", forceY(0).strength(0.08));
+            fg.__forcesConfigured = true;
+            fg.d3ReheatSimulation();
           }
         }}
         enableZoomInteraction={true}
