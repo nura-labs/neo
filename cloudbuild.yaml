@@ -2,6 +2,10 @@ steps:
   - name: "gcr.io/cloud-builders/docker"
     args:
       - "build"
+      - "--build-arg=NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyDHaJXjc4soJV0LcETBq4Y3WsCOXUJfy5U"
+      - "--build-arg=NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=crested-sentry-492800-s9.firebaseapp.com"
+      - "--build-arg=NEXT_PUBLIC_FIREBASE_PROJECT_ID=crested-sentry-492800-s9"
+      - "--build-arg=NEXT_PUBLIC_APP_URL=https://neo.nura.sh"
       - "-t"
       - "us-central1-docker.pkg.dev/crested-sentry-492800-s9/neo/neo:$COMMIT_SHA"
       - "-t"
