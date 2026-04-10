@@ -47,7 +47,7 @@ export default function KnowledgePage() {
         </div>
       ) : (
         <>
-          <div className="h-[400px] rounded-lg border bg-background">
+          <div className="h-[500px] rounded-xl border border-white/5 bg-[#0a0a0a] overflow-hidden">
             <KnowledgeGraph />
           </div>
           <div className="space-y-2">

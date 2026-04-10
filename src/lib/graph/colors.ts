@@ -1,14 +1,14 @@
 export const nodeTypeColors: Record<string, string> = {
-  pattern: "#3b82f6",       // blue
-  convention: "#22c55e",    // green
-  module: "#a855f7",        // purple
-  architecture: "#f97316",  // orange
-  decision: "#eab308",      // yellow
-  concept: "#06b6d4",       // cyan
-  note: "#6b7280",          // gray
-  reference: "#ec4899",     // pink
+  pattern: "#60a5fa",       // soft blue
+  convention: "#4ade80",    // soft green
+  module: "#a78bfa",        // soft purple
+  architecture: "#f9a8d4",  // soft pink
+  decision: "#fbbf24",      // amber
+  concept: "#67e8f9",       // soft cyan
+  note: "#9ca3af",          // gray
+  reference: "#fb923c",     // soft orange
 };
 
 export function getNodeColor(type: string): string {
-  return nodeTypeColors[type] ?? "#6b7280";
+  return nodeTypeColors[type] ?? "#9ca3af";
 }

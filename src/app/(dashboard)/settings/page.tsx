@@ -14,21 +14,32 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>MCP Server</CardTitle>
-          <CardDescription>Connect your AI tools to Neo</CardDescription>
+          <CardTitle>Setup</CardTitle>
+          <CardDescription>Connect your AI tools to Neo in 2 steps</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <McpUrl appUrl={appUrl} />
-          <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium mb-2">1. Install the skill</p>
             <div className="rounded-md bg-muted p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Claude Code:</p>
-              <code className="text-xs">claude mcp add --transport http neo {appUrl}/api/mcp</code>
-            </div>
-            <div className="rounded-md bg-muted p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Codex (~/.codex/config.toml):</p>
-              <code className="text-xs">[mcp_servers.neo]{"\n"}url = &quot;{appUrl}/api/mcp&quot;</code>
+              <code className="text-xs">npx skills add nura-labs/neo-skill</code>
             </div>
           </div>
+
+          <div>
+            <p className="text-sm font-medium mb-2">2. Add the MCP server</p>
+            <div className="space-y-3">
+              <div className="rounded-md bg-muted p-3">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Claude Code:</p>
+                <code className="text-xs">claude mcp add --transport http neo {appUrl}/api/mcp</code>
+              </div>
+              <div className="rounded-md bg-muted p-3">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Codex (~/.codex/config.toml):</p>
+                <code className="text-xs">[mcp_servers.neo]{"\n"}url = &quot;{appUrl}/api/mcp&quot;</code>
+              </div>
+            </div>
+          </div>
+
+          <McpUrl appUrl={appUrl} />
         </CardContent>
       </Card>
 
