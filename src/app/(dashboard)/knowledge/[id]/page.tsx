@@ -26,13 +26,14 @@ interface RelatedNode {
 export default function KnowledgeDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const { getIdToken } = useAuth();
+  const { user } = useAuth();
   const [node, setNode] = useState<KnowledgeNode | null>(null);
   const [related, setRelated] = useState<RelatedNode[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getIdToken().then((token) => {
+    if (!user) return;
+    user.getIdToken().then((token) => {
       Promise.all([
         apiFetch<KnowledgeNode>(`/api/knowledge/${id}`, token),
         apiFetch<RelatedNode[]>(`/api/knowledge/${id}/related`, token),
@@ -42,7 +43,7 @@ export default function KnowledgeDetailPage() {
         setLoading(false);
       });
     });
-  }, [id, getIdToken]);
+  }, [id, user]);
 
   if (loading) return <p className="text-muted-foreground">Loading...</p>;
   if (!node) return <p className="text-destructive">Node not found</p>;

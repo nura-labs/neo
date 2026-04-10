@@ -17,13 +17,14 @@ interface KnowledgeNode {
 }
 
 export default function KnowledgePage() {
-  const { getIdToken } = useAuth();
+  const { user } = useAuth();
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getIdToken().then((token) => {
+    if (!user) return;
+    user.getIdToken().then((token) => {
       apiFetch<{ nodes: KnowledgeNode[]; total: number }>("/api/knowledge", token).then((res) => {
         if (res.ok) {
           setNodes(res.data.nodes);
@@ -32,7 +33,7 @@ export default function KnowledgePage() {
         setLoading(false);
       });
     });
-  }, [getIdToken]);
+  }, [user]);
 
   if (loading) return <p className="text-muted-foreground">Loading...</p>;
 

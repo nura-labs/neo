@@ -36,16 +36,17 @@ export function KnowledgeGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const router = useRouter();
-  const { getIdToken } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
-    getIdToken().then((token) => {
+    if (!user) return;
+    user.getIdToken().then((token) => {
       apiFetch<GraphData>("/api/graph", token).then((res) => {
         if (res.ok) setData(res.data);
         setLoading(false);
       });
     });
-  }, [getIdToken]);
+  }, [user]);
 
   useEffect(() => {
     function updateSize() {

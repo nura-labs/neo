@@ -15,54 +15,47 @@ interface Overview {
 }
 
 export default function DashboardPage() {
-  const { getIdToken } = useAuth();
+  const { user } = useAuth();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    getIdToken().then((token) => {
+    if (!user) return;
+
+    user.getIdToken().then((token) => {
       apiFetch<Overview>("/api/knowledge/overview", token).then((res) => {
         if (res.ok) setOverview(res.data);
         setLoaded(true);
       });
     });
-  }, [getIdToken]);
+  }, [user]);
 
   if (!loaded) return <p className="text-muted-foreground">Loading...</p>;
-
   if (!overview) return <p className="text-muted-foreground">Failed to load overview.</p>;
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Overview</h1>
-
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Knowledge Nodes</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{overview.totalNodes}</div>
-          </CardContent>
+          <CardContent><div className="text-3xl font-bold">{overview.totalNodes}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Connections</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{overview.totalEdges}</div>
-          </CardContent>
+          <CardContent><div className="text-3xl font-bold">{overview.totalEdges}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Sources</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{overview.sourceBreakdown.length}</div>
-          </CardContent>
+          <CardContent><div className="text-3xl font-bold">{overview.sourceBreakdown.length}</div></CardContent>
         </Card>
       </div>
-
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">By Type</CardTitle></CardHeader>
@@ -88,9 +81,7 @@ export default function DashboardPage() {
           <CardHeader><CardTitle className="text-base">Recent</CardTitle></CardHeader>
           <CardContent>
             {overview.recentNodes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Install the Neo skill and run &quot;index this project&quot; to get started
-              </p>
+              <p className="text-sm text-muted-foreground">Install the Neo skill and run &quot;index this project&quot; to get started</p>
             ) : (
               <div className="space-y-3">
                 {overview.recentNodes.map((n) => (
