@@ -28,6 +28,7 @@ steps:
       - "--region=us-central1"
       - "--platform=managed"
       - "--allow-unauthenticated"
+      - "--service-account=firebase-adminsdk-fbsvc@crested-sentry-492800-s9.iam.gserviceaccount.com"
       - "--add-cloudsql-instances=crested-sentry-492800-s9:us-central1:neo-db"
       - "--set-env-vars=DB_NAME=neo,DB_USER=neo-user,INSTANCE_UNIX_SOCKET=/cloudsql/crested-sentry-492800-s9:us-central1:neo-db,NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyDHaJXjc4soJV0LcETBq4Y3WsCOXUJfy5U,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=crested-sentry-492800-s9.firebaseapp.com,NEXT_PUBLIC_FIREBASE_PROJECT_ID=crested-sentry-492800-s9,NEXT_PUBLIC_APP_URL=https://neo.nura.sh"
       - "--set-secrets=DB_PASS=db-password:latest"
