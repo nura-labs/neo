@@ -2,7 +2,8 @@ import { cookies } from "next/headers";
 import { adminAuth } from "./firebase-admin";
 import { getUserByFirebaseUid, createUser } from "@/lib/db/queries";
 import type { User } from "@/lib/db/schema";
-import { SESSION_COOKIE_NAME } from "./session";
+
+const SESSION_COOKIE_NAME = "neo-session";
 
 export async function getAuthenticatedUser(): Promise<User> {
   const cookieStore = await cookies();
@@ -12,7 +13,7 @@ export async function getAuthenticatedUser(): Promise<User> {
     throw new Error("Not authenticated");
   }
 
-  const decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
+  const decoded = await adminAuth.verifyIdToken(sessionCookie, false);
 
   let user = await getUserByFirebaseUid(decoded.uid);
 

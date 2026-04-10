@@ -4,14 +4,6 @@ import { getUserByFirebaseUid, createUser } from "@/lib/db/queries";
 import type { User } from "@/lib/db/schema";
 
 const SESSION_COOKIE_NAME = "neo-session";
-const SESSION_EXPIRY = 60 * 60 * 24 * 7; // 7 days in seconds
-
-export async function createSessionCookie(idToken: string): Promise<string> {
-  const sessionCookie = await adminAuth.createSessionCookie(idToken, {
-    expiresIn: SESSION_EXPIRY * 1000,
-  });
-  return sessionCookie;
-}
 
 export async function verifySession(): Promise<User | null> {
   try {
@@ -20,11 +12,11 @@ export async function verifySession(): Promise<User | null> {
 
     if (!sessionCookie) return null;
 
-    const decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
+    // Verify the Firebase ID token directly (like orkest does)
+    const decoded = await adminAuth.verifyIdToken(sessionCookie, false);
 
     let user = await getUserByFirebaseUid(decoded.uid);
 
-    // Auto-create user on first login
     if (!user) {
       user = await createUser({
         email: decoded.email ?? "",
@@ -39,4 +31,4 @@ export async function verifySession(): Promise<User | null> {
   }
 }
 
-export { SESSION_COOKIE_NAME, SESSION_EXPIRY };
+export { SESSION_COOKIE_NAME };
