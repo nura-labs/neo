@@ -5,7 +5,7 @@ import { createNodeSchema } from "@/lib/validators/knowledge";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthenticatedUser();
+    const user = await getAuthenticatedUser(request);
     const url = new URL(request.url);
     const type = url.searchParams.get("type") ?? undefined;
     const source = url.searchParams.get("source") ?? undefined;
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthenticatedUser();
+    const user = await getAuthenticatedUser(request);
     const body = await request.json();
     const input = createNodeSchema.parse(body);
     const node = await createNode(user.id, input);

@@ -29,15 +29,6 @@ export function SignupForm() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  async function exchangeToken(idToken: string) {
-    const res = await fetch("/api/auth/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken }),
-    });
-    if (!res.ok) throw new Error("Failed to create session");
-  }
-
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -45,12 +36,9 @@ export function SignupForm() {
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(result.user, { displayName: name });
-      const idToken = await result.user.getIdToken();
-      await exchangeToken(idToken);
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed");
-    } finally {
       setLoading(false);
     }
   }
@@ -60,13 +48,10 @@ export function SignupForm() {
     setLoading(true);
     try {
       const provider = new GithubAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();
-      await exchangeToken(idToken);
+      await signInWithPopup(auth, provider);
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "GitHub signup failed");
-    } finally {
       setLoading(false);
     }
   }
@@ -76,74 +61,39 @@ export function SignupForm() {
       <CardHeader className="text-center">
         <CardTitle className="text-3xl font-bold">Neo</CardTitle>
         <CardDescription className="text-xs">by Nura Labs</CardDescription>
-        <CardDescription className="mt-2">
-          Start building your knowledge graph
-        </CardDescription>
+        <CardDescription className="mt-2">Start building your knowledge graph</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <form onSubmit={handleSignup} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
+            <Input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={6}
-              required
-            />
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
           </div>
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Creating account..." : "Create account"}
           </Button>
         </form>
-
         <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-          </div>
+          <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
           <div className="relative flex justify-center text-xs uppercase">
             <span className="bg-card px-2 text-muted-foreground">or</span>
           </div>
         </div>
-
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={handleGithubSignup}
-          disabled={loading}
-        >
+        <Button variant="outline" className="w-full" onClick={handleGithubSignup} disabled={loading}>
           Continue with GitHub
         </Button>
-
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link href="/login" className="underline underline-offset-4 hover:text-primary">
-            Sign in
-          </Link>
+          <Link href="/login" className="underline underline-offset-4 hover:text-primary">Sign in</Link>
         </p>
       </CardContent>
     </Card>

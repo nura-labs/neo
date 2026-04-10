@@ -1,26 +1,35 @@
-import { verifySession } from "@/lib/auth/session";
-import { redirect } from "next/navigation";
-import { getNodesByUser } from "@/lib/db/queries";
+"use client";
+
+import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import { nodeTypeColors } from "@/lib/graph/colors";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 
-export default async function KnowledgePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ type?: string; source?: string; page?: string }>;
-}) {
-  const user = await verifySession();
-  if (!user) redirect("/login");
+interface KnowledgeNode {
+  id: string;
+  type: string;
+  title: string;
+  tags: string[];
+  source: string | null;
+}
 
-  const params = await searchParams;
-  const page = parseInt(params.page ?? "1");
-  const { nodes, total } = await getNodesByUser(user.id, {
-    type: params.type,
-    source: params.source,
-    page,
-    limit: 50,
-  });
+export default function KnowledgePage() {
+  const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch<{ nodes: KnowledgeNode[]; total: number }>("/api/knowledge").then((res) => {
+      if (res.ok) {
+        setNodes(res.data.nodes);
+        setTotal(res.data.total);
+      }
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) return <p className="text-muted-foreground">Loading...</p>;
 
   return (
     <div className="space-y-6">
@@ -32,8 +41,7 @@ export default async function KnowledgePage({
       {nodes.length === 0 ? (
         <div className="rounded-lg border bg-muted/30 p-8 text-center">
           <p className="text-muted-foreground">
-            No knowledge nodes yet. Install the Neo skill and run &quot;index this
-            project&quot; to get started.
+            No knowledge nodes yet. Install the Neo skill and run &quot;index this project&quot; to get started.
           </p>
         </div>
       ) : (
@@ -49,51 +57,22 @@ export default async function KnowledgePage({
                   <div className="flex items-center gap-2">
                     <div
                       className="h-2.5 w-2.5 rounded-full"
-                      style={{
-                        backgroundColor: nodeTypeColors[node.type] ?? "#6b7280",
-                      }}
+                      style={{ backgroundColor: nodeTypeColors[node.type] ?? "#6b7280" }}
                     />
                     <h3 className="font-medium">{node.title}</h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {node.type}
-                    {node.source ? ` - ${node.source}` : ""}
+                    {node.type}{node.source ? ` - ${node.source}` : ""}
                   </p>
                 </div>
                 <div className="flex gap-1">
                   {node.tags.slice(0, 3).map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-xs">
-                      {tag}
-                    </Badge>
+                    <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
                   ))}
                 </div>
               </div>
             </Link>
           ))}
-        </div>
-      )}
-
-      {total > 50 && (
-        <div className="flex justify-center gap-2">
-          {page > 1 && (
-            <Link
-              href={`/knowledge?page=${page - 1}`}
-              className="text-sm underline"
-            >
-              Previous
-            </Link>
-          )}
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {Math.ceil(total / 50)}
-          </span>
-          {page < Math.ceil(total / 50) && (
-            <Link
-              href={`/knowledge?page=${page + 1}`}
-              className="text-sm underline"
-            >
-              Next
-            </Link>
-          )}
         </div>
       )}
     </div>

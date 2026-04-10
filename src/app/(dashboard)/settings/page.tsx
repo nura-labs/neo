@@ -1,14 +1,22 @@
-import { verifySession } from "@/lib/auth/session";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiTokenManager } from "@/components/settings/api-token";
 import { McpUrl } from "@/components/settings/mcp-url";
+import { useAuth } from "@/contexts/auth-context";
 
-export default async function SettingsPage() {
-  const user = await verifySession();
-  if (!user) redirect("/login");
+export default function SettingsPage() {
+  const { user } = useAuth();
+  const [apiToken, setApiToken] = useState<string | null>(null);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://neo.nura.sh";
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  useEffect(() => {
+    apiFetch<{ apiToken: string }>("/api/settings/token").then((res) => {
+      if (res.ok) setApiToken(res.data.apiToken);
+    });
+  }, []);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -17,24 +25,18 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>MCP Server URL</CardTitle>
-          <CardDescription>
-            Add this to your Claude Code, Cursor, or any MCP-compatible tool
-          </CardDescription>
+          <CardDescription>Add this to your Claude Code, Cursor, or any MCP-compatible tool</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <McpUrl appUrl={appUrl} />
           <div className="space-y-3">
             <div className="rounded-md bg-muted p-3">
               <p className="text-xs font-medium text-muted-foreground mb-2">Claude Code:</p>
-              <code className="text-xs">
-                claude mcp add --transport http neo {appUrl}/api/mcp
-              </code>
+              <code className="text-xs">claude mcp add --transport http neo {appUrl}/api/mcp</code>
             </div>
             <div className="rounded-md bg-muted p-3">
               <p className="text-xs font-medium text-muted-foreground mb-2">Codex (~/.codex/config.toml):</p>
-              <code className="text-xs">
-                [mcp_servers.neo]{"\n"}url = &quot;{appUrl}/api/mcp&quot;
-              </code>
+              <code className="text-xs">[mcp_servers.neo]{"\n"}url = &quot;{appUrl}/api/mcp&quot;</code>
             </div>
           </div>
         </CardContent>
@@ -43,12 +45,14 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>API Token</CardTitle>
-          <CardDescription>
-            Use this token to authenticate MCP requests
-          </CardDescription>
+          <CardDescription>Used for MCP authentication</CardDescription>
         </CardHeader>
         <CardContent>
-          <ApiTokenManager initialToken={user.apiToken} />
+          {apiToken ? (
+            <ApiTokenManager initialToken={apiToken} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          )}
         </CardContent>
       </Card>
 
@@ -59,11 +63,11 @@ export default async function SettingsPage() {
         <CardContent className="space-y-2">
           <div className="flex justify-between">
             <span className="text-sm text-muted-foreground">Email</span>
-            <span className="text-sm">{user.email}</span>
+            <span className="text-sm">{user?.email}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-muted-foreground">Name</span>
-            <span className="text-sm">{user.name}</span>
+            <span className="text-sm">{user?.displayName ?? "—"}</span>
           </div>
         </CardContent>
       </Card>

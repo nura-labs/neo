@@ -1,14 +1,30 @@
-import { verifySession } from "@/lib/auth/session";
-import { redirect } from "next/navigation";
-import { getOverview } from "@/lib/db/queries";
+"use client";
+
+import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { nodeTypeColors } from "@/lib/graph/colors";
 
-export default async function DashboardPage() {
-  const user = await verifySession();
-  if (!user) redirect("/login");
+interface Overview {
+  totalNodes: number;
+  totalEdges: number;
+  typeBreakdown: { type: string; count: number }[];
+  sourceBreakdown: { source: string | null; count: number }[];
+  recentNodes: { id: string; title: string; type: string; source: string | null }[];
+}
 
-  const overview = await getOverview(user.id);
+export default function DashboardPage() {
+  const [overview, setOverview] = useState<Overview | null>(null);
+
+  useEffect(() => {
+    apiFetch<Overview>("/api/knowledge/overview").then((res) => {
+      if (res.ok) setOverview(res.data);
+    });
+  }, []);
+
+  if (!overview) {
+    return <p className="text-muted-foreground">Loading...</p>;
+  }
 
   return (
     <div className="space-y-6">
@@ -42,9 +58,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">
-              {overview.sourceBreakdown.length}
-            </div>
+            <div className="text-3xl font-bold">{overview.sourceBreakdown.length}</div>
           </CardContent>
         </Card>
       </div>
@@ -64,10 +78,7 @@ export default async function DashboardPage() {
                     <div className="flex items-center gap-2">
                       <div
                         className="h-3 w-3 rounded-full"
-                        style={{
-                          backgroundColor:
-                            nodeTypeColors[t.type] ?? "#6b7280",
-                        }}
+                        style={{ backgroundColor: nodeTypeColors[t.type] ?? "#6b7280" }}
                       />
                       <span className="text-sm">{t.type}</span>
                     </div>
@@ -91,13 +102,11 @@ export default async function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {overview.recentNodes.map((n) => (
-                  <div key={n.id} className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{n.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {n.type} {n.source ? `- ${n.source}` : ""}
-                      </p>
-                    </div>
+                  <div key={n.id}>
+                    <p className="text-sm font-medium">{n.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {n.type} {n.source ? `- ${n.source}` : ""}
+                    </p>
                   </div>
                 ))}
               </div>

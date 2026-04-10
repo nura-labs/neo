@@ -1,0 +1,1119 @@
+EASY Authentication with Firebase & Next.JS 15 (Latest) - YouTube
+  URL: https://www.youtube.com/watch?v=qb2Ug9Yoatg
+  ... authentication in your Next.js 18 app using Firebase. This tutorial covers setting up Firebase, integrating it with Next.js, and creating a ...
+
+  --- Content ---
+  ![Thumbnail (1920x1080)](https://i.ytimg.com/vi/qb2Ug9Yoatg/maxresdefault.jpg)
+  # [EASY Authentication with Firebase & Next.JS 15 (Latest)](https://www.youtube.com/watch?v=qb2Ug9Yoatg)
+  
+  **Visibility**: Public
+  **Uploaded by**: [proflead](http://www.youtube.com/@proflead)
+  **Uploaded at**: 2024-08-11T07:49:35-07:00
+  **Published at**: 2024-08-11T07:49:35-07:00
+  **Length**: 05:41
+  **Views**: 13836
+  **Likes**: undefined
+  **Category**: Science & Technology
+  
+  ## Description
+  
+  ```
+  AUTHENTICATION made EASY with Firebase and Next.JS 18 (Latest)
+  
+  Learn how to easily implement authentication in your Next.js 18 app using Firebase. This tutorial covers setting up Firebase, integrating it with Next.js, and creating a seamless login/logout flow. Perfect for developers looking to add secure user authentication to their latest Next.js projects quickly and efficiently.
+  
+  #firebase #nextjs #google #authentification #auth 
+  
+  ✅ Follow me for daily updates and coding tips:
+  - https://proflead.dev/
+  - https://www.linkedin.com/in/proflead/
+  - https://github.com/proflead/
+  - https://t.me/profleaddev
+  
+  You can support me on Patreon: 
+  https://patreon.com/proflead
+  ```
+  
+  ## Transcript
+  
+  what's up guys I am really happy to see all of you again today thank you so much for coming back I am really excited to share with you my new video this video will be about authentification I will teach you how you can create authentification bu your njs project in Firebase if you're ready then let's get started first we have to open console Firebase google.com and create new project I've already created one in advance I call it Al nextjs then at the left side bar I select build and then select authentification once new page fully loaded click get started on the next page you will be able to select our signin methods it could be Google Facebook Microsoft email and password and so on for this tutorial I'll select Google and email and password just for example but you can select as many as you like to turn on the BET click on it and then click this toggle enable then in your list you will be able to see signin providers to turn on Google signin method you also have to provide support email for project it will be your Firebase Google email once you ready click the save button at the bottom right corner and you will be able to see all your signin providers after that go to the project settings and set up your application click on the project settings then scroll down and select web app give the name for your web app if you want to stop hosting at the same time click this checkbox also setop Firebase hosting then select the project that you've created in the previous tab and click Register App after a few seconds you will be able to see settings for your SDK that we will be using inside our nextjs project so you need to save this data for future steps for the nextjs project we need to use npm version keep in mind these data should be kept privately instead of hardcoded you can use environment variable however in my example I will just hardcode it for make it simple then let's go to our terminal I'll create njx application then I need to install Firebase package by using npm command install Firebase okay let's open our ID vs code first thing that we will do we will create Firebase GS file inside this file we will have our configurations you can copy my code I will leave the link into GitHub project under the description then replace Firebase config with your data okay let's create one more file this time we will create authentification context the authentification context provides a way to share authentification State like the current user and authentification functions like sign in and logout across your entire application so you don't have to pass propes manually at every level then we have to go to our layout JS file to wrap our entire nextjs application with auto provider this ensure that the auto edification context is available throughout my application it will allow any component to access the audification state and functions don't forget to import our component at the top of the script after that let's create a login component this component will use the use out hook to acess the signin function from the authentification context it will allow and users to sign in with Google okay now let's open page.js file let's import our component and context first and then we will modify the code to protect our content so basically we want to show the content only for people who sign in don't worry if you can follow up I'll share this code in my GitHub project okay let's restart our application and see what we get unfortunately I see the error let me figure out what's going on since we have some problem with our context let me move it into separate folder in case there is uh any conflict with other files L will move fire with jinson file into main application folder just to keep everything in one place and the final step will be uh we need to add use client directive at the top of our phjs file we will need it to declare that a component and its children should be rendered on the client side okay since there is no error anymore let's check out application okay since the page is working let's check our sending form I'll try to select any of my Google account and try to sign in cool finally I sign in and now I can see my content perfect let's check another Tab and seems everything is working here as well we can sign out and then we will be sign out from two tabs perfect that's it I hope you like this video I hope you find it useful and informative if yes please click like don't forget to subscribe on my channel if you haven't subscribed yet and I hope to see you in my next fire base videos bye
+  
+  
+  
+  --- End Content ---
+
+Firebase Authentication in Nextjs with Server Components
+  URL: https://stackoverflow.com/questions/78011450/firebase-authentication-in-nextjs-with-server-components
+  I am trying to learn how to implement authentication with firebase to my nextjs app. First thing we do while using firebase is initialize ...
+
+  --- Content ---
+  ##### Collectives™ on Stack Overflow
+  
+  Find centralized, trusted content and collaborate around the technologies you use most.
+  
+  [Learn more about Collectives](https://stackoverflow.com/collectives)
+  
+  **Stack Internal**
+  
+  Knowledge at work
+  
+  Bring the best of human thought and AI automation together at your work.
+  
+  [Explore Stack Internal](https://stackoverflow.co/internal/?utm_medium=referral&utm_source=stackoverflow-community&utm_campaign=side-bar&utm_content=explore-teams-compact-popover)
+  
+  # [Firebase Authentication in Nextjs with Server Components](https://stackoverflow.com/questions/78011450/firebase-authentication-in-nextjs-with-server-components)
+  
+  [Ask Question](https://stackoverflow.com/questions/ask)
+  
+  Asked2 years, 1 month ago
+  
+  Modified [2 years, 1 month ago](https://stackoverflow.com/questions/78011450/firebase-authentication-in-nextjs-with-server-components?lastactivity "2024-02-17 15:20:17Z")
+  
+  Viewed
+  2k times
+  
+  
+  Part
+  of [Google Cloud](https://stackoverflow.com/collectives/google-cloud) Collective
+  
+  
+  This question shows research effort; it is useful and clear
+  
+  0
+  
+  Save this question.
+  
+  [Timeline](https://stackoverflow.com/posts/78011450/timeline)
+  
+  Show activity on this post.
+  
+  I am trying to learn how to implement authentication with firebase to my nextjs app. First thing we do while using firebase is initialize our firebase with our configuration (`apiKey` etc.). If i use any firebase function from a client component, it requires this configuration to be sent to client and i think this is something we should never do?
+  
+  [https://firebase.google.com/codelabs/firebase-nextjs#5](https://firebase.google.com/codelabs/firebase-nextjs#5)
+  But in this tutorial of google they do just that? They prefixed `.env` variables with `NEXT_PUBLIC_` which makes them available to client components? Would a company like google create a wrong tutorial for their product? Is it okay to send my firebase conf. to client?
+  
+  If not how can i implement this functionality with server components. I think for sign in and sign out, I can call server actions?
+  
+  The thing I cant do is how to listen for authentication state and render UI according to that(change sign in button to signout button etc.)
+  
+  lets assume i have server component navbar:
+  
+  ```javascript
+  Copy
+  function Navbar() {
+    let signedIn = false;
+    auth.onAuthStateChanged((authUser) => {
+      if (authUser) {
+      signedIn = true;
+      }
+    });
+  return (
+   signedIn ? <SignOutButton /> : <SignInButton />
+   )
+  }
+  ```
+  
+  I cant use state or useEffect on server component and i dont know declaring normal variable like this would be appropriate?
+  
+  Google Cloud Collective
+  
+  - [javascript](https://stackoverflow.com/questions/tagged/javascript "show questions tagged 'javascript'")
+  - [next.js](https://stackoverflow.com/questions/tagged/next.js "show questions tagged 'next.js'")
+  - [firebase-authentication](https://stackoverflow.com/questions/tagged/firebase-authentication "show questions tagged 'firebase-authentication'")
+  - [next.js13](https://stackoverflow.com/questions/tagged/next.js13 "show questions tagged 'next.js13'")
+  - [react-server-components](https://stackoverflow.com/questions/tagged/react-server-components "show questions tagged 'react-server-components'")
+  
+  [Share](https://stackoverflow.com/q/78011450 "Short permalink to this question")
+  
+  Share a link to this question
+  
+  Copy link [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/ "The current license for this post: CC BY-SA 4.0")
+  
+  [Improve this question](https://stackoverflow.com/posts/78011450/edit "")
+  
+  Follow
+  
+  
+  
+  Follow this question to receive notifications
+  
+  [edited Feb 17, 2024 at 15:20](https://stackoverflow.com/posts/78011450/revisions "show all edits to this post")
+  
+  [![Frank van Puffelen's user avatar](https://www.gravatar.com/avatar/12d378e6a9788ab9c94bbafe242b82b4?s=64&d=identicon&r=PG)](https://stackoverflow.com/users/209103/frank-van-puffelen)
+  
+  [Frank van Puffelen](https://stackoverflow.com/users/209103/frank-van-puffelen)
+  
+  604k8585 gold badges897897 silver badges870870 bronze badges
+  
+  asked Feb 17, 2024 at 8:29
+  
+  [![MWW's user avatar](https://lh3.googleusercontent.com/a/AATXAJzAltF_sTlGiVD50z0atgE-a91BwAJsh6bS8OWC=k-s64)](https://stackoverflow.com/users/18835625/mww)
+  
+  [MWW](https://stackoverflow.com/users/18835625/mww)
+  
+  322 bronze badges
+  
+  1
+  
+  - "If i use any firebase function from a client component, it requires this configuration to be sent to client and i think this is something we should never do?" See: [stackoverflow.com/questions/37482366/…](https://stackoverflow.com/questions/37482366/is-it-safe-to-expose-firebase-apikey-to-the-public "is it safe to expose firebase apikey to the public")
+  
+  
+  
+  Frank van Puffelen
+  
+  
+  –
+  [Frank van Puffelen](https://stackoverflow.com/users/209103/frank-van-puffelen "603,973 reputation")
+  
+  
+  
+  2024-02-17 15:21:19 +00:00
+  
+  [CommentedFeb 17, 2024 at 15:21](https://stackoverflow.com/questions/78011450/firebase-authentication-in-nextjs-with-server-components#comment137532058_78011450)
+  
+  
+  [Add a comment](https://stackoverflow.com/questions/78011450/firebase-authentication-in-nextjs-with-server-components# "Use comments to ask for more information or suggest improvements. Avoid answering questions in comments.") \| [Expand to show all comments on this post](https://stackoverflow.com/questions/78011450/firebase-authentication-in-nextjs-with-server-components# "Expand to show all comments on this post")
+  
+  ## 1 Answer 1
+  
+  Sorted by:
+  [Reset to default](https://stackoverflow.com/questions/78011450/firebase-authentication-in-nextjs-with-server-components?answertab=scoredesc#tab-top)
+  
+  Highest score (default)
+  
+  Trending (recent votes count more)
+  
+  Date modified (newest first)
+  
+  Date created (oldest first)
+  
+  
+  This answer is useful
+  
+  0
+  
+  Save this answer.
+  
+  [Timeline](https://stackoverflow.com/posts/78011512/timeline)
+  
+  Show activity on this post.
+  
+  please go through below
+  
+  this is how a typical config. file looks like
+  
+  ```javascript
+  Copy
+  import firebase from 'firebase/app';
+  import 'firebase/auth';
+  
+  const firebaseConfig = {
+    apiKey: 'YOUR_API_KEY',
+    authDomain: 'YOUR_AUTH_DOMAIN',
+    projectId: 'YOUR_PROJECT_ID',
+    storageBucket: 'YOUR_STORAGE_BUCKET',
+    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
+    appId: 'YOUR_APP_ID',
+  };
+  
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+  ```
+  
+  you must be worrie about mostely by exposing the API key to public.so read below for that
+  
+  ( ref. [api-keys#general-info](https://firebase.google.com/docs/projects/api-keys#general-info))
+  
+  > **API keys for Firebase are different from typical API keys**
+  >
+  > Unlike how API keys are typically used, API keys for Firebase services
+  > are not used to control access to backend resources; that can only be
+  > done with Firebase Security Rules (to control which users can access
+  > resources) and App Check (to control which apps can access resources).
+  >
+  > Usually, you need to fastidiously guard API keys (for example, by
+  > using a vault service or setting the keys as environment variables);
+  > however, API keys for Firebase services are ok to include in code or
+  > checked-in config files.
+  >
+  > Although API keys for Firebase services are safe to include in code,
+  > there are a few specific cases when you should enforce limits for your
+  > API key; for example, if you're using Firebase ML, Firebase
+  > Authentication with the email/password sign-in method, or a billable
+  > Google Cloud API. Learn more about these cases later on this page.
+  
+  also go through [is-it-safe-to-expose-firebase-apikey-to-the-public](https://stackoverflow.com/questions/37482366/is-it-safe-to-expose-firebase-apikey-to-the-public)
+  
+  if you are clear about the uses and working of the API keys in your firebase projest then you can follow the rest of implitation as usual
+  
+  for example :
+  
+  **for signInWithGoogle:**
+  
+  ```javascript
+  Copy
+  const signInWithGoogle = async () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await firebase.auth().signInWithPopup(provider);
+  };
+  ```
+  
+  now for the purpose of making sure user's authentication status(as you highlighted). You can use Subscribe states to authentication changes
+  To subscribe to authentication changes, follow these steps:
+  
+  Navigate to the src/components/Header.jsx file.
+  Replace the useUserSession function with the following code:
+  
+  ```javascript
+  Copy
+  function useUserSession(initialUser) {
+          // The initialUser comes from the server through a server component
+          const [user, setUser] = useState(initialUser);
+          const router = useRouter();
+  
+          useEffect(() => {
+                  const unsubscribe = onAuthStateChanged(authUser => {
+                          setUser(authUser);
+                  });
+                  return () => {
+                          unsubscribe();
+                  };
+          }, []);
+  
+          useEffect(() => {
+                  onAuthStateChanged(authUser => {
+                          if (user === undefined) return;
+                          if (user?.email !== authUser?.email) {
+                                  router.refresh();
+                          }
+                  });
+          }, [user]);
+  
+          return user;
+  }
+  ```
+  
+  for more details visit ref : [firebase-nextjs#5](https://firebase.google.com/codelabs/firebase-nextjs#5)
+  
+  [Share](https://stackoverflow.com/a/78011512 "Short permalink to this answer")
+  
+  Share a link to this answer
+  
+  Copy link [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/ "The current license for this post: CC BY-SA 4.0")
+  
+  [Improve this answer](https://stackoverflow.com/posts/78011512/edit "")
+  
+  Follow
+  
+  
+  
+  Follow this answer to receive notifications
+  
+  answered Feb 17, 2024 at 9:00
+  
+  [![Rainy sidewalks's user avatar](https://i.sstatic.net/Js7Lt.jpg?s=64)](https://stackoverflow.com/users/22197081/rainy-sidewalks)
+  
+  [Rainy sidewalks](https://stackoverflow.com/users/22197081/rainy-sidewalks)
+  
+  1,17411 gold badge77 silver badges2121 bronze badges
+  
+  Sign up to request clarification or add additional context in comments.
+  
+  
+  ## 2 Comments
+  
+  Add a comment
+  
+  [![](https://lh3.googleusercontent.com/a/AATXAJzAltF_sTlGiVD50z0atgE-a91BwAJsh6bS8OWC=k-s48)](https://stackoverflow.com/users/18835625/mww)
+  
+  MWW
+  
+  [MWW](https://stackoverflow.com/users/18835625/mww) [Over a year ago](https://stackoverflow.com/questions/78011450/firebase-authentication-in-nextjs-with-server-components#comment137530426_78011512)
+  
+  thanks, thats a big relief. Google's Gemini still highly disagrees about sending firebase apikey to client though. for now, I will go for client components
+  
+  2024-02-17T10:12:21.043Z+00:00
+  
+  0
+  
+  Reply
+  
+  - Copy link
+  
+  [![](https://i.sstatic.net/Js7Lt.jpg?s=64)](https://stackoverflow.com/users/22197081/rainy-sidewalks)
+  
+  Rainy sidewalks
+  
+  [Rainy sidewalks](https://stackoverflow.com/users/22197081/rainy-sidewalks) [Over a year ago](https://stackoverflow.com/questions/78011450/firebase-authentication-in-nextjs-with-server-components#comment137530805_78011512)
+  
+  yes sure , it is always best to follow strong security rules for any situation what so ever also because they are very flexible so you can always find best for your situation .
+  
+  2024-02-17T11:21:39.53Z+00:00
+  
+  0
+  
+  Reply
+  
+  - Copy link
+  
+  ## Your Answer
+  
+  Draft saved
+  
+  Draft discarded
+  
+  ### Sign up or [log in](https://stackoverflow.com/users/login?ssrc=question_page&returnurl=https%3a%2f%2fstackoverflow.com%2fquestions%2f78011450%2ffirebase-authentication-in-nextjs-with-server-components%23new-answer)
+  
+  Sign up using Google
+  
+  
+  Sign up using Email and Password
+  
+  
+  Submit
+  
+  ### Post as a guest
+  
+  Name
+  
+  Email
+  
+  Required, but never shown
+  
+  Post Your Answer
+  
+  Discard
+  
+  
+  By clicking “Post Your Answer”, you agree to our [terms of service](https://stackoverflow.com/legal/terms-of-service/public) and acknowledge you have read our [privacy policy](https://stackoverflow.com/legal/privacy-policy).
+  
+  
+  Start asking to get answers
+  
+  Find the answer to your question by asking.
+  
+  [Ask question](https://stackoverflow.com/questions/ask)
+  
+  Explore related questions
+  
+  - [javascript](https://stackoverflow.com/questions/tagged/javascript "show questions tagged 'javascript'")
+  - [next.js](https://stackoverflow.com/questions/tagged/next.js "show questions tagged 'next.js'")
+  - [firebase-authentication](https://stackoverflow.com/questions/tagged/firebase-authentication "show questions tagged 'firebase-authentication'")
+  - [next.js13](https://stackoverflow.com/questions/tagged/next.js13 "show questions tagged 'next.js13'")
+  - [react-server-components](https://stackoverflow.com/questions/tagged/react-server-components "show questions tagged 'react-server-components'")
+  
+  See similar questions with these tags.
+  
+  lang-js
+  --- End Content ---
+
+Getting Started: Server and Client Components - Next.js
+  URL: https://nextjs.org/docs/app/getting-started/server-and-client-components
+  This page explains how Server and Client Components work in Next.js and when to use them, with examples of how to compose them together in your application.
+
+  --- Content ---
+  Menu
+  
+  Using App Router
+  
+  Features available in /app
+  
+  Latest Version
+  
+  16.2.3
+  
+  Using App Router
+  
+  Features available in /app
+  
+  Latest Version
+  
+  16.2.3
+  
+  [App Router](https://nextjs.org/docs/app) [Getting Started](https://nextjs.org/docs/app/getting-started) Server and Client Components
+  
+  Copy page
+  
+  # Server and Client Components
+  
+  Last updated April 8, 2026
+  
+  By default, layouts and pages are [Server Components](https://react.dev/reference/rsc/server-components), which lets you fetch data and render parts of your UI on the server, optionally cache the result, and stream it to the client. When you need interactivity or browser APIs, you can use [Client Components](https://react.dev/reference/rsc/use-client) to layer in functionality.
+  
+  This page explains how Server and Client Components work in Next.js and when to use them, with examples of how to compose them together in your application.
+  
+  ## When to use Server and Client Components? [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#when-to-use-server-and-client-components)
+  
+  The client and server environments have different capabilities. Server and Client components allow you to run logic in each environment depending on your use case.
+  
+  Use **Client Components** when you need:
+  
+  - [State](https://react.dev/learn/managing-state) and [event handlers](https://react.dev/learn/responding-to-events). E.g. `onClick`, `onChange`.
+  - [Lifecycle logic](https://react.dev/learn/lifecycle-of-reactive-effects). E.g. `useEffect`.
+  - Browser-only APIs. E.g. `localStorage`, `window`, `Navigator.geolocation`, etc.
+  - [Custom hooks](https://react.dev/learn/reusing-logic-with-custom-hooks).
+  
+  Use **Server Components** when you need:
+  
+  - Fetch data from databases or APIs close to the source.
+  - Use API keys, tokens, and other secrets without exposing them to the client.
+  - Reduce the amount of JavaScript sent to the browser.
+  - Improve the [First Contentful Paint (FCP)](https://web.dev/fcp/), and stream content progressively to the client.
+  
+  For example, the `<Page>` component is a Server Component that fetches data about a post, and passes it as props to the `<LikeButton>` which handles client-side interactivity.
+  
+  app/\[id\]/page.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  import LikeButton from '@/app/ui/like-button'
+  import { getPost } from '@/lib/data'
+  
+  export default async function Page({
+    params,
+  }: {
+    params: Promise<{ id: string }>
+  }) {
+    const { id } = await params
+    const post = await getPost(id)
+  
+    return (
+      <div>
+        <main>
+          <h1>{post.title}</h1>
+          {/* ... */}
+          <LikeButton likes={post.likes} />
+        </main>
+      </div>
+    )
+  }
+  ```
+  
+  app/ui/like-button.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  'use client'
+  
+  import { useState } from 'react'
+  
+  export default function LikeButton({ likes }: { likes: number }) {
+    // ...
+  }
+  ```
+  
+  ## How do Server and Client Components work in Next.js? [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#how-do-server-and-client-components-work-in-nextjs)
+  
+  ### On the server [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#on-the-server)
+  
+  On the server, Next.js uses React's APIs to orchestrate rendering. The rendering work is split into chunks, by individual route segments ( [layouts and pages](https://nextjs.org/docs/app/getting-started/layouts-and-pages)):
+  
+  - **Server Components** are rendered into a special data format called the React Server Component Payload (RSC Payload).
+  - **Client Components** and the RSC Payload are used to [prerender](https://nextjs.org/docs/app/glossary#prerendering) HTML.
+  
+  > **What is the React Server Component Payload (RSC)?**
+  >
+  > The RSC Payload is a compact binary representation of the rendered React Server Components tree. It's used by React on the client to update the browser's DOM. The RSC Payload contains:
+  >
+  > - The rendered result of Server Components
+  > - Placeholders for where Client Components should be rendered and references to their JavaScript files
+  > - Any props passed from a Server Component to a Client Component
+  
+  ### On the client (first load) [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#on-the-client-first-load)
+  
+  Then, on the client:
+  
+  1. **HTML** is used to immediately show a fast non-interactive preview of the route to the user.
+  2. **RSC Payload** is used to reconcile the Client and Server Component trees.
+  3. **JavaScript** is used to hydrate Client Components and make the application interactive.
+  
+  > **What is hydration?**
+  >
+  > Hydration is React's process for attaching [event handlers](https://react.dev/learn/responding-to-events) to the DOM, to make the static HTML interactive.
+  
+  ### Subsequent Navigations [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#subsequent-navigations)
+  
+  On subsequent navigations:
+  
+  - The **RSC Payload** is prefetched and cached for instant navigation.
+  - **Client Components** are rendered entirely on the client, without the server-rendered HTML.
+  
+  ## Examples [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#examples)
+  
+  ### Using Client Components [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#using-client-components)
+  
+  You can create a Client Component by adding the [`"use client"`](https://react.dev/reference/react/use-client) directive at the top of the file, above your imports.
+  
+  app/ui/counter.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  'use client'
+  
+  import { useState } from 'react'
+  
+  export default function Counter() {
+    const [count, setCount] = useState(0)
+  
+    return (
+      <div>
+        <p>{count} likes</p>
+        <button onClick={() => setCount(count + 1)}>Click me</button>
+      </div>
+    )
+  }
+  ```
+  
+  `"use client"` is used to declare a **boundary** between the Server and Client module graphs (trees).
+  
+  Once a file is marked with `"use client"`, **all its imports and child components are considered part of the client bundle**. This means you don't need to add the directive to every component that is intended for the client.
+  
+  ### Reducing JS bundle size [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#reducing-js-bundle-size)
+  
+  To reduce the size of your client JavaScript bundles, add `'use client'` to specific interactive components instead of marking large parts of your UI as Client Components.
+  
+  For example, the `<Layout>` component contains mostly static elements like a logo and navigation links, but includes an interactive search bar. `<Search />` is interactive and needs to be a Client Component, however, the rest of the layout can remain a Server Component.
+  
+  app/layout.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  // Client Component
+  import Search from './search'
+  // Server Component
+  import Logo from './logo'
+  
+  // Layout is a Server Component by default
+  export default function Layout({ children }: { children: React.ReactNode }) {
+    return (
+      <>
+        <nav>
+          <Logo />
+          <Search />
+        </nav>
+        <main>{children}</main>
+      </>
+    )
+  }
+  ```
+  
+  app/ui/search.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  'use client'
+  
+  export default function Search() {
+    // ...
+  }
+  ```
+  
+  ### Passing data from Server to Client Components [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#passing-data-from-server-to-client-components)
+  
+  You can pass data from Server Components to Client Components using props.
+  
+  app/\[id\]/page.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  import LikeButton from '@/app/ui/like-button'
+  import { getPost } from '@/lib/data'
+  
+  export default async function Page({
+    params,
+  }: {
+    params: Promise<{ id: string }>
+  }) {
+    const { id } = await params
+    const post = await getPost(id)
+  
+    return <LikeButton likes={post.likes} />
+  }
+  ```
+  
+  app/ui/like-button.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  'use client'
+  
+  export default function LikeButton({ likes }: { likes: number }) {
+    // ...
+  }
+  ```
+  
+  Alternatively, you can stream data from a Server Component to a Client Component with the [`use` API](https://react.dev/reference/react/use). See an [example](https://nextjs.org/docs/app/getting-started/fetching-data#streaming-data-with-the-use-api).
+  
+  > **Good to know**: Props passed to Client Components need to be [serializable](https://react.dev/reference/react/use-server#serializable-parameters-and-return-values) by React.
+  
+  ### Interleaving Server and Client Components [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#interleaving-server-and-client-components)
+  
+  You can pass Server Components as a prop to a Client Component. This allows you to visually nest server-rendered UI within Client components.
+  
+  A common pattern is to use `children` to create a _slot_ in a `<ClientComponent>`. For example, a `<Cart>` component that fetches data on the server, inside a `<Modal>` component that uses client state to toggle visibility.
+  
+  app/ui/modal.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  'use client'
+  
+  export default function Modal({ children }: { children: React.ReactNode }) {
+    return <div>{children}</div>
+  }
+  ```
+  
+  Then, in a parent Server Component (e.g.`<Page>`), you can pass a `<Cart>` as the child of the `<Modal>`:
+  
+  app/page.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  import Modal from './ui/modal'
+  import Cart from './ui/cart'
+  
+  export default function Page() {
+    return (
+      <Modal>
+        <Cart />
+      </Modal>
+    )
+  }
+  ```
+  
+  In this pattern, all Server Components will be rendered on the server ahead of time, including those as props. The resulting RSC payload will contain references of where Client Components should be rendered within the component tree.
+  
+  ### Context providers [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#context-providers)
+  
+  [React context](https://react.dev/learn/passing-data-deeply-with-context) is commonly used to share global state like the current theme. However, React context is not supported in Server Components.
+  
+  To use context, create a Client Component that accepts `children`:
+  
+  app/theme-provider.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  'use client'
+  
+  import { createContext } from 'react'
+  
+  export const ThemeContext = createContext({})
+  
+  export default function ThemeProvider({
+    children,
+  }: {
+    children: React.ReactNode
+  }) {
+    return <ThemeContext.Provider value="dark">{children}</ThemeContext.Provider>
+  }
+  ```
+  
+  Then, import it into a Server Component (e.g. `layout`):
+  
+  app/layout.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  import ThemeProvider from './theme-provider'
+  
+  export default function RootLayout({
+    children,
+  }: {
+    children: React.ReactNode
+  }) {
+    return (
+      <html>
+        <body>
+          <ThemeProvider>{children}</ThemeProvider>
+        </body>
+      </html>
+    )
+  }
+  ```
+  
+  Your Server Component will now be able to directly render your provider, and all other Client Components throughout your app will be able to consume this context.
+  
+  > **Good to know**: You should render providers as deep as possible in the tree – notice how `ThemeProvider` only wraps `{children}` instead of the entire `<html>` document. This makes it easier for Next.js to optimize the static parts of your Server Components.
+  
+  ### Third-party components [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#third-party-components)
+  
+  When using a third-party component that relies on client-only features, you can wrap it in a Client Component to ensure it works as expected.
+  
+  For example, the `<Carousel />` can be imported from the `acme-carousel` package. This component uses `useState`, but it doesn't yet have the `"use client"` directive.
+  
+  If you use `<Carousel />` within a Client Component, it will work as expected:
+  
+  app/gallery.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  'use client'
+  
+  import { useState } from 'react'
+  import { Carousel } from 'acme-carousel'
+  
+  export default function Gallery() {
+    const [isOpen, setIsOpen] = useState(false)
+  
+    return (
+      <div>
+        <button onClick={() => setIsOpen(true)}>View pictures</button>
+        {/* Works, since Carousel is used within a Client Component */}
+        {isOpen && <Carousel />}
+      </div>
+    )
+  }
+  ```
+  
+  However, if you try to use it directly within a Server Component, you'll see an error. This is because Next.js doesn't know `<Carousel />` is using client-only features.
+  
+  To fix this, you can wrap third-party components that rely on client-only features in your own Client Components:
+  
+  app/carousel.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  'use client'
+  
+  import { Carousel } from 'acme-carousel'
+  
+  export default Carousel
+  ```
+  
+  Now, you can use `<Carousel />` directly within a Server Component:
+  
+  app/page.tsx
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  import Carousel from './carousel'
+  
+  export default function Page() {
+    return (
+      <div>
+        <p>View pictures</p>
+        {/*  Works, since Carousel is a Client Component */}
+        <Carousel />
+      </div>
+    )
+  }
+  ```
+  
+  > **Advice for Library Authors**
+  >
+  > If you’re building a component library, add the `"use client"` directive to entry points that rely on client-only features. This lets your users import components into Server Components without needing to create wrappers.
+  >
+  > It's worth noting some bundlers might strip out `"use client"` directives. You can find an example of how to configure esbuild to include the `"use client"` directive in the [React Wrap Balancer](https://github.com/shuding/react-wrap-balancer/blob/main/tsup.config.ts#L10-L13) and [Vercel Analytics](https://github.com/vercel/analytics/blob/main/packages/web/tsup.config.js#L26-L30) repositories.
+  
+  ### Preventing environment poisoning [Link to this section](https://nextjs.org/docs/app/getting-started/server-and-client-components\#preventing-environment-poisoning)
+  
+  JavaScript modules can be shared between both Server and Client Components modules. This means it's possible to accidentally import server-only code into the client. For example, consider the following function:
+  
+  lib/data.ts
+  
+  TypeScript
+  
+  JavaScriptTypeScript
+  
+  ```
+  export async function getData() {
+    const res = await fetch('https://external-service.com/data', {
+      headers: {
+        authorization: process.env.API_KEY,
+      },
+    })
+  
+    return res.json()
+  }
+  ```
+  
+  This function contains an `API_KEY` that should never be exposed to the client.
+  
+  In Next.js, only environment variables prefixed with `NEXT_PUBLIC_` are included in the client bundle. If variables are not prefixed, Next.js replaces them with an empty string.
+  
+  As a result, even though `getData()` can be imported and executed on the client, it won't work as expected.
+  
+  To prevent accidental usage in Client Components, you can use the [`server-only` package](https://www.npmjs.com/package/server-only).
+  
+  Then, import the package into a file that contains server-only code:
+  
+  lib/data.js
+  
+  ```
+  import 'server-only'
+  
+  export async function getData() {
+    const res = await fetch('https://external-service.com/data', {
+      headers: {
+        authorization: process.env.API_KEY,
+      },
+    })
+  
+    return res.json()
+  }
+  ```
+  
+  Now, if you try to import the module into a Client Component, there will be a build-time error.
+  
+  The corresponding [`client-only` package](https://www.npmjs.com/package/client-only) can be used to mark modules that contain client-only logic like code that accesses the `window` object.
+  
+  In Next.js, installing `server-only` or `client-only` is **optional**. However, if your linting rules flag extraneous dependencies, you may install them to avoid issues.
+  
+  pnpmnpmyarnbun
+  
+  Terminal
+  
+  ```
+  pnpm add server-only
+  ```
+  
+  Next.js handles `server-only` and `client-only` imports internally to provide clearer error messages when a module is used in the wrong environment. The contents of these packages from NPM are not used by Next.js.
+  
+  Next.js also provides its own type declarations for `server-only` and `client-only`, for TypeScript configurations where [`noUncheckedSideEffectImports`](https://www.typescriptlang.org/tsconfig/#noUncheckedSideEffectImports) is active.
+  
+  ## Next Steps
+  
+  Learn more about the APIs mentioned in this page.
+  
+  [**use client** \\
+  Learn how to use the use client directive to render a component on the client.](https://nextjs.org/docs/app/api-reference/directives/use-client)
+  
+  Was this helpful?
+  
+  supported.
+  
+  Send
+  --- End Content ---
+
+Integrating Firebase with Next.js : r/nextjs - Reddit
+  URL: https://www.reddit.com/r/nextjs/comments/1gvr9pn/integrating_firebase_with_nextjs/
+  I integrated firebase authentication with my next js project. i set everything to let users sign in through google, github and email and ...
+
+Integrate Next.js | Firebase Hosting - Google
+  URL: https://firebase.google.com/docs/hosting/frameworks/nextjs
+  A guide to integrating and deploying Next.js applications to Firebase using experimental CLI functionality; for most Angular users, Firebase App Hosting is ...
+
+  --- Content ---
+  [Skip to main content](https://firebase.google.com/docs/hosting/frameworks/nextjs#main-content)
+  
+  [![Firebase](https://www.gstatic.com/devrel-devsite/prod/v369eac9380f92e8fedc492e2689927bb3475d758266c381eee326d0b49a77481/firebase/images/lockup.svg)](https://firebase.google.com/)
+  
+  `/`
+  
+  Language
+  
+  - [English](https://firebase.google.com/docs/hosting/frameworks/nextjs)
+  - [Deutsch](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=de)
+  - [Español – América Latina](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=es-419)
+  - [Français](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=fr)
+  - [Indonesia](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=id)
+  - [Italiano](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=it)
+  - [Polski](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=pl)
+  - [Português – Brasil](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=pt-br)
+  - [Tiếng Việt](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=vi)
+  - [Türkçe](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=tr)
+  - [Русский](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=ru)
+  - [עברית](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=he)
+  - [العربيّة](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=ar)
+  - [فارسی](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=fa)
+  - [हिंदी](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=hi)
+  - [বাংলা](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=bn)
+  - [ภาษาไทย](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=th)
+  - [中文 – 简体](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=zh-cn)
+  - [中文 – 繁體](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=zh-tw)
+  - [日本語](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=ja)
+  - [한국어](https://firebase.google.com/docs/hosting/frameworks/nextjs?hl=ko)
+  
+  [Blog](https://firebase.blog/) [Go to console](https://console.firebase.google.com/)
+  
+  [Sign in](https://firebase.google.com/_d/signin?continue=https%3A%2F%2Ffirebase.google.com%2Fdocs%2Fhosting%2Fframeworks%2Fnextjs&prompt=select_account)
+  
+  - [Documentation](https://firebase.google.com/docs)
+  - [Hosting](https://firebase.google.com/docs/hosting)
+  
+  - On this page
+  - [Serve static content](https://firebase.google.com/docs/hosting/frameworks/nextjs#serve_static_content)
+  - [Pre-render dynamic content](https://firebase.google.com/docs/hosting/frameworks/nextjs#pre-render_dynamic_content)
+    - [Optional: integrate with the Firebase JS SDK](https://firebase.google.com/docs/hosting/frameworks/nextjs#optional_integrate_with_the_firebase_js_sdk)
+    - [Optional: integrate with the Firebase Admin SDK](https://firebase.google.com/docs/hosting/frameworks/nextjs#optional_integrate_with_the_firebase_admin_sdk)
+  - [Serve fully dynamic content (SSR)](https://firebase.google.com/docs/hosting/frameworks/nextjs#serve_fully_dynamic_content_ssr)
+  - [Configure Hosting behavior with next.config.js](https://firebase.google.com/docs/hosting/frameworks/nextjs#configure_behavior_with_nextconfigjs)
+    - [Image Optimization](https://firebase.google.com/docs/hosting/frameworks/nextjs#image_optimization)
+    - [Redirects, Rewrites, and Headers](https://firebase.google.com/docs/hosting/frameworks/nextjs#redirects_rewrites_and_headers)
+    - [Optional: integrate with Firebase Authentication](https://firebase.google.com/docs/hosting/frameworks/nextjs#optional_integrate_with_firebase_authentication)
+  
+  If you are building server-rendered Angular or Next.js apps, check out next-generation [Firebase App Hosting,](https://firebase.google.com/docs/app-hosting) a full-stack solution for modern web frameworks.
+  
+  
+  - [Firebase](https://firebase.google.com/)
+  - [Documentation](https://firebase.google.com/docs)
+  - [Hosting](https://firebase.google.com/docs/hosting)
+  - [Build](https://firebase.google.com/docs/build)
+  
+  Was this helpful?
+  
+  
+  
+   Send feedback
+  
+  
+  
+  # Integrate Next.js    Stay organized with collections      Save and categorize content based on your preferences.
+  
+  - On this page
+  - [Serve static content](https://firebase.google.com/docs/hosting/frameworks/nextjs#serve_static_content)
+  - [Pre-render dynamic content](https://firebase.google.com/docs/hosting/frameworks/nextjs#pre-render_dynamic_content)
+    - [Optional: integrate with the Firebase JS SDK](https://firebase.google.com/docs/hosting/frameworks/nextjs#optional_integrate_with_the_firebase_js_sdk)
+    - [Optional: integrate with the Firebase Admin SDK](https://firebase.google.com/docs/hosting/frameworks/nextjs#optional_integrate_with_the_firebase_admin_sdk)
+  - [Serve fully dynamic content (SSR)](https://firebase.google.com/docs/hosting/frameworks/nextjs#serve_fully_dynamic_content_ssr)
+  - [Configure Hosting behavior with next.config.js](https://firebase.google.com/docs/hosting/frameworks/nextjs#configure_behavior_with_nextconfigjs)
+    - [Image Optimization](https://firebase.google.com/docs/hosting/frameworks/nextjs#image_optimization)
+    - [Redirects, Rewrites, and Headers](https://firebase.google.com/docs/hosting/frameworks/nextjs#redirects_rewrites_and_headers)
+    - [Optional: integrate with Firebase Authentication](https://firebase.google.com/docs/hosting/frameworks/nextjs#optional_integrate_with_firebase_authentication)
+  
+  Using the Firebase CLI, you can deploy your Next.js Web apps to Firebase and
+  serve them with Firebase Hosting.
+  
+  ## Serve static content
+  
+  After initializing Firebase, you can serve static content with the standard
+  deployment command:
+  
+  ```
+  firebase deploy
+  ```
+  
+  If your app includes dynamic server-side logic, the CLI deploys that
+  logic to Cloud Functions for Firebase.
+  You can [view your deployed app](https://firebase.google.com/docs/hosting/test-preview-deploy#view-changes)
+  on its live site.
+  
+  ## Pre-render dynamic content
+  
+  The Firebase CLI will detect usage of
+  [getStaticProps](https://nextjs.org/docs/pages/building-your-application/data-fetching/get-static-props)
+  and [getStaticPaths](https://nextjs.org/docs/pages/building-your-application/data-fetching/get-static-paths).
+  
+  ### Optional: integrate with the Firebase JS SDK
+  
+  When including Firebase JS SDK methods in both server and client bundles, guard
+  against runtime errors by checking `isSupported()` before using the product.
+  Not all products are
+  [supported in all environments](https://firebase.google.com/docs/web/environments-js-sdk#other_environments).
+  
+  ### Optional: integrate with the Firebase Admin SDK
+  
+  Admin SDK bundles will fail if included in your browser build; refer to them
+  only inside [getStaticProps](https://nextjs.org/docs/basic-features/data-fetching/get-static-props)
+  and [getStaticPaths](https://nextjs.org/docs/basic-features/data-fetching/get-static-paths).
+  
+  ## Serve fully dynamic content (SSR)
+  
+  The Firebase CLI will detect usage of
+  [getServerSideProps](https://nextjs.org/docs/basic-features/data-fetching/get-server-side-props).
+  In such cases, the CLI will deploy functions to Cloud Functions for Firebase to run dynamic
+  server code. You can view information about these functions, such as their domain and runtime
+  configuration, in the [Firebase console](https://console.firebase.google.com/project/_/functions).
+  
+  ## Configure Hosting behavior with `next.config.js`
+  
+  ### Image Optimization
+  
+  Using [Next.js Image Optimization](https://nextjs.org/docs/basic-features/image-optimization)
+  is supported, but it will trigger creation of a function
+  (in [Cloud Functions for Firebase](https://firebase.google.com/docs/functions)), even if you’re not using SSR.
+  
+  ### Redirects, Rewrites, and Headers
+  
+  The Firebase CLI respects
+  [redirects](https://nextjs.org/docs/api-reference/next.config.js/redirects),
+  [rewrites](https://nextjs.org/docs/api-reference/next.config.js/rewrites), and
+  [headers](https://nextjs.org/docs/api-reference/next.config.js/headers) in
+  `next.config.js`, converting them to their
+  respective equivalent Firebase Hosting configuration at deploy time. If a
+  Next.js redirect, rewrite, or header cannot be converted to an equivalent
+  Firebase Hosting header, it falls back and builds a function—even if you
+  aren’t using image optimization or SSR.
+  
+  ### Optional: integrate with Firebase Authentication
+  
+  The web framework-aware Firebase deployment tooling will automatically keep
+  client and server state in sync using cookies. There are some methods provided
+  for accessing the authentication context in SSR:
+  
+  - The Express `res.locals` object will optionally contain an authenticated
+  Firebase App instance (`firebaseApp`) and the currently signed-in user
+  (`currentUser`). This can be accessed in `getServerSideProps`.
+  - The authenticated Firebase App name is provided on the route query
+  (`__firebaseAppName`). This allows for manual integration while in context:
+  
+  ```
+  // get the authenticated Firebase App
+  const firebaseApp = getApp(useRouter().query.__firebaseAppName);
+  ```
+  
+  Was this helpful?
+  
+  
+  
+   Send feedback
+  
+  
+  
+  Except as otherwise noted, the content of this page is licensed under the [Creative Commons Attribution 4.0 License](https://creativecommons.org/licenses/by/4.0/), and code samples are licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0). For details, see the [Google Developers Site Policies](https://developers.google.com/site-policies). Java is a registered trademark of Oracle and/or its affiliates.
+  
+  Last updated 2026-04-09 UTC.
+  
+  
+  Need to tell us more?
+  
+  
+  
+  
+  
+  
+  \[\[\["Easy to understand","easyToUnderstand","thumb-up"\],\["Solved my problem","solvedMyProblem","thumb-up"\],\["Other","otherUp","thumb-up"\]\],\[\["Missing the information I need","missingTheInformationINeed","thumb-down"\],\["Too complicated / too many steps","tooComplicatedTooManySteps","thumb-down"\],\["Out of date","outOfDate","thumb-down"\],\["Samples / code issue","samplesCodeIssue","thumb-down"\],\["Other","otherDown","thumb-down"\]\],\["Last updated 2026-04-09 UTC."\],\[\],\[\]\]
+  --- End Content ---

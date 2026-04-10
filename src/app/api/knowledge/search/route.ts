@@ -4,13 +4,10 @@ import { searchNodes } from "@/lib/db/queries";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthenticatedUser();
+    const user = await getAuthenticatedUser(request);
     const url = new URL(request.url);
     const query = url.searchParams.get("q");
-
-    if (!query) {
-      return NextResponse.json({ error: "Missing query parameter 'q'" }, { status: 400 });
-    }
+    if (!query) return NextResponse.json({ error: "Missing query parameter 'q'" }, { status: 400 });
 
     const type = url.searchParams.get("type") ?? undefined;
     const source = url.searchParams.get("source") ?? undefined;
