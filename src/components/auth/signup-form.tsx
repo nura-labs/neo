@@ -9,6 +9,7 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { auth } from "@/lib/auth/firebase-client";
+import { getAuthErrorMessage } from "@/lib/auth/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +39,7 @@ export function SignupForm() {
       await updateProfile(result.user, { displayName: name });
       router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Signup failed");
+      setError(getAuthErrorMessage(err));
       setLoading(false);
     }
   }
@@ -51,7 +52,7 @@ export function SignupForm() {
       await signInWithPopup(auth, provider);
       router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "GitHub signup failed");
+      setError(getAuthErrorMessage(err));
       setLoading(false);
     }
   }

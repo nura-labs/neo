@@ -8,6 +8,7 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { auth } from "@/lib/auth/firebase-client";
+import { getAuthErrorMessage } from "@/lib/auth/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +36,7 @@ export function LoginForm() {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(getAuthErrorMessage(err));
       setLoading(false);
     }
   }
@@ -48,7 +49,7 @@ export function LoginForm() {
       await signInWithPopup(auth, provider);
       router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "GitHub login failed");
+      setError(getAuthErrorMessage(err));
       setLoading(false);
     }
   }

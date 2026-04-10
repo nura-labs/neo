@@ -9,6 +9,7 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { auth } from "@/lib/auth/firebase-client";
+import { getAuthErrorMessage } from "@/lib/auth/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,7 +87,7 @@ function AuthorizeForm() {
       const idToken = await result.user.getIdToken();
       await completeAuth(idToken);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      setError(getAuthErrorMessage(err));
       setLoading(false);
     }
   }
@@ -100,7 +101,7 @@ function AuthorizeForm() {
       const idToken = await result.user.getIdToken();
       await completeAuth(idToken);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "GitHub authentication failed");
+      setError(getAuthErrorMessage(err));
       setLoading(false);
     }
   }
