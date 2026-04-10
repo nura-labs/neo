@@ -18,8 +18,11 @@ const handler = createMcpHandler(
   }
 );
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
 const authHandler = withMcpAuth(handler, verifyMcpToken, {
   required: true,
+  resourceMetadataPath: `${APP_URL}/.well-known/oauth-protected-resource`,
 });
 
 export { authHandler as GET, authHandler as POST, authHandler as DELETE };

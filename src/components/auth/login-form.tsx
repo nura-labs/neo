@@ -71,8 +71,9 @@ export function LoginForm() {
   return (
     <Card>
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Neo</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-3xl font-bold">Neo</CardTitle>
+        <CardDescription className="text-xs">by Nura Labs</CardDescription>
+        <CardDescription className="mt-2">
           Sign in to your knowledge graph
         </CardDescription>
       </CardHeader>

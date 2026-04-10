@@ -23,11 +23,19 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <McpUrl appUrl={appUrl} />
-          <div className="rounded-md bg-muted p-3">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Claude Code setup:</p>
-            <code className="text-xs">
-              claude mcp add neo {appUrl}/api/mcp --header &quot;Authorization: Bearer YOUR_TOKEN&quot;
-            </code>
+          <div className="space-y-3">
+            <div className="rounded-md bg-muted p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">Claude Code:</p>
+              <code className="text-xs">
+                claude mcp add --transport http neo {appUrl}/api/mcp
+              </code>
+            </div>
+            <div className="rounded-md bg-muted p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">Codex (~/.codex/config.toml):</p>
+              <code className="text-xs">
+                [mcp_servers.neo]{"\n"}url = &quot;{appUrl}/api/mcp&quot;
+              </code>
+            </div>
           </div>
         </CardContent>
       </Card>

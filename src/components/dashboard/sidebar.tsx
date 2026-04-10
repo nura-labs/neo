@@ -17,8 +17,9 @@ export function Sidebar() {
   return (
     <aside className="flex w-56 flex-col border-r bg-muted/30">
       <div className="flex h-14 items-center border-b px-4">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          Neo
+        <Link href="/" className="flex flex-col">
+          <span className="text-lg font-bold tracking-tight">Neo</span>
+          <span className="text-[10px] text-muted-foreground -mt-1">by Nura Labs</span>
         </Link>
       </div>
       <nav className="flex-1 space-y-1 p-2">

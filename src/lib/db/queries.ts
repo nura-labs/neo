@@ -1,6 +1,6 @@
-import { eq, and, sql, desc, arrayContains, inArray } from "drizzle-orm";
+import { eq, and, sql, desc, arrayContains, inArray, lt } from "drizzle-orm";
 import { db } from "./index";
-import { users, knowledgeNodes, knowledgeEdges } from "./schema";
+import { users, knowledgeNodes, knowledgeEdges, oauthClients, oauthCodes } from "./schema";
 import type {
   User,
   KnowledgeNode,
@@ -416,4 +416,65 @@ export async function getGraphData(userId: string) {
       name: e.relationship,
     })),
   };
+}
+
+// ─── OAuth ──────────────────────────────────────────────
+
+export async function createOAuthClient(data: {
+  clientId: string;
+  clientSecret?: string;
+  redirectUris: string[];
+  clientName?: string;
+}) {
+  const [client] = await db
+    .insert(oauthClients)
+    .values(data)
+    .returning();
+  return client;
+}
+
+export async function getOAuthClient(clientId: string) {
+  const [client] = await db
+    .select()
+    .from(oauthClients)
+    .where(eq(oauthClients.clientId, clientId))
+    .limit(1);
+  return client ?? null;
+}
+
+export async function createOAuthCode(data: {
+  code: string;
+  clientId: string;
+  userId: string;
+  redirectUri: string;
+  codeChallenge: string;
+  codeChallengeMethod?: string;
+}) {
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const [authCode] = await db
+    .insert(oauthCodes)
+    .values({ ...data, expiresAt })
+    .returning();
+  return authCode;
+}
+
+export async function getOAuthCode(code: string) {
+  const [authCode] = await db
+    .select()
+    .from(oauthCodes)
+    .where(
+      and(
+        eq(oauthCodes.code, code),
+        eq(oauthCodes.used, false)
+      )
+    )
+    .limit(1);
+  return authCode ?? null;
+}
+
+export async function markOAuthCodeUsed(code: string) {
+  await db
+    .update(oauthCodes)
+    .set({ used: true })
+    .where(eq(oauthCodes.code, code));
 }

@@ -9,6 +9,12 @@ export function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup") ||
+    pathname.startsWith("/authorize") ||
+    pathname.startsWith("/.well-known") ||
+    pathname.startsWith("/api/.well-known") ||
+    pathname.startsWith("/api/register") ||
+    pathname.startsWith("/api/token") ||
+    pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/mcp") ||
     pathname.startsWith("/api/sse") ||
     pathname.startsWith("/api/transport") ||
@@ -18,7 +24,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // API routes return 401
+  // MCP [transport] route handles its own auth via bearer tokens
+  if (pathname.match(/^\/api\/[^/]+$/) && !pathname.startsWith("/api/knowledge") && !pathname.startsWith("/api/graph") && !pathname.startsWith("/api/settings")) {
+    return NextResponse.next();
+  }
+
+  // Dashboard API routes return 401
   if (pathname.startsWith("/api/")) {
     if (!sessionCookie) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

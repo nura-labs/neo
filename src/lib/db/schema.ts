@@ -7,6 +7,7 @@ import {
   index,
   uniqueIndex,
   real,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -69,6 +70,42 @@ export const knowledgeEdges = pgTable(
     ),
   ]
 );
+
+// ─── OAuth ───────────────────────────────────────────────
+
+export const oauthClients = pgTable("oauth_clients", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clientId: text("client_id").notNull().unique(),
+  clientSecret: text("client_secret"),
+  clientSecretExpiresAt: timestamp("client_secret_expires_at", { withTimezone: true }),
+  redirectUris: text("redirect_uris")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  clientName: text("client_name"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const oauthCodes = pgTable("oauth_codes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull().unique(),
+  clientId: text("client_id").notNull(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  codeChallengeMethod: text("code_challenge_method").notNull().default("S256"),
+  scopes: text("scopes")
+    .array()
+    .notNull()
+    .default(sql`'{"read","write"}'::text[]`),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  used: boolean("used").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ─── Types ───────────────────────────────────────────────
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
