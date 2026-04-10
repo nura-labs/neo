@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/auth-context";
 import { apiFetch } from "@/lib/api";
 import { nodeTypeColors } from "@/lib/graph/colors";
 import Link from "next/link";
@@ -16,19 +17,22 @@ interface KnowledgeNode {
 }
 
 export default function KnowledgePage() {
+  const { getIdToken } = useAuth();
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch<{ nodes: KnowledgeNode[]; total: number }>("/api/knowledge").then((res) => {
-      if (res.ok) {
-        setNodes(res.data.nodes);
-        setTotal(res.data.total);
-      }
-      setLoading(false);
+    getIdToken().then((token) => {
+      apiFetch<{ nodes: KnowledgeNode[]; total: number }>("/api/knowledge", token).then((res) => {
+        if (res.ok) {
+          setNodes(res.data.nodes);
+          setTotal(res.data.total);
+        }
+        setLoading(false);
+      });
     });
-  }, []);
+  }, [getIdToken]);
 
   if (loading) return <p className="text-muted-foreground">Loading...</p>;
 
@@ -50,26 +54,16 @@ export default function KnowledgePage() {
           <div className="h-[400px] rounded-lg border bg-background">
             <KnowledgeGraph />
           </div>
-
           <div className="space-y-2">
             {nodes.map((node) => (
-              <Link
-                key={node.id}
-                href={`/knowledge/${node.id}`}
-                className="block rounded-lg border p-4 transition-colors hover:bg-muted/50"
-              >
+              <Link key={node.id} href={`/knowledge/${node.id}`} className="block rounded-lg border p-4 transition-colors hover:bg-muted/50">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <div
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: nodeTypeColors[node.type] ?? "#6b7280" }}
-                      />
+                      <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: nodeTypeColors[node.type] ?? "#6b7280" }} />
                       <h3 className="font-medium">{node.title}</h3>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {node.type}{node.source ? ` - ${node.source}` : ""}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{node.type}{node.source ? ` - ${node.source}` : ""}</p>
                   </div>
                   <div className="flex gap-1">
                     {node.tags.slice(0, 3).map((tag) => (

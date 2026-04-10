@@ -1,0 +1,2193 @@
+Next.js Security Best Practices: Complete 2026 Guide - Authgear
+  URL: https://www.authgear.com/post/nextjs-security-best-practices
+  Authgear provides a drop-in auth layer for Next.js that handles passkeys, TOTP MFA, social login, and session management out of the box — so ...
+
+  --- Content ---
+  [Engineering](https://www.authgear.com/post-category/engineering)
+  
+  # Next.js Security Best Practices (2026)
+  
+  Next.js has grown from a simple React framework into a full-stack platform — and with that power comes a wider attack surface. The App Router, Server Components, and Server Actions mean your authentication logic, database queries, and business rules all live in the same codebase as your UI.
+  
+  [![](https://www.authgear.com/post/nextjs-security-best-practices)](https://www.authgear.com/post/nextjs-security-best-practices#)
+  
+  min. read
+  
+  Last updated:
+  
+  March 31, 2026
+  
+  ![](https://cdn.prod.website-files.com/60658b47b03f0c77e8c14884/69c42d53ca23bd9175728d0f_featured-image-web.webp)
+  
+  [![](https://cdn.prod.website-files.com/60658b46b03f0cf83ac1485d/68dfa5a05bd7000d3e27dcdb_blog-discoard-community%402x.jpg)](https://discord.gg/Kdn5vcYwAS)
+  
+  Star us on GitHub and stay updated
+  
+  Star authgear/authgear-server on GitHub[Star](https://github.com/authgear/authgear-server) [1,614](https://github.com/authgear/authgear-server/stargazers)
+  
+  ## The Security Surface of a Next.js App in 2026
+  
+  Next.js has grown from a simple React framework into a full-stack platform — and with that power comes a wider attack surface. The App Router, Server Components, and Server Actions mean your authentication logic, database queries, and business rules all live in the same codebase as your UI. That's convenient, but a single misconfiguration can expose server-side code to the outside world.
+  
+  In 2026, the most impactful security incidents in Next.js apps share three root causes: trusting the wrong layer (e.g., relying on middleware alone for auth), leaking secrets to the client, and failing to validate inputs on the server. This guide addresses each — with concrete code examples, callouts for the most dangerous anti-patterns, and a checklist you can keep open during code review.
+  
+  For deeper dives into specific topics, see our guides on [Next.js middleware authentication](https://www.authgear.com/post/nextjs-middleware-authentication) and [JWT authentication in Next.js](https://www.authgear.com/post/nextjs-jwt-authentication).
+  
+  ## 1\. Authentication Best Practices
+  
+  ### Prefer Passkeys Over Passwords
+  
+  Passwords are phishable and vulnerable to credential stuffing and brute-force attacks. Passkeys — built on the WebAuthn/FIDO2 standard — are phishing-resistant because each credential is cryptographically bound to your domain. In 2026, all major platforms (iOS, Android, Windows, macOS) support passkeys natively. If you're starting a new app, make passkeys your default sign-in method and treat passwords as a legacy fallback only.
+  
+  ### Require MFA for Sensitive Actions
+  
+  Even if a user's password is compromised, multi-factor authentication (MFA) blocks attackers from completing a login. Enforce MFA at the application level — not just at the identity provider — for high-risk actions like changing an email address, exporting data, or accessing admin routes. TOTP and WebAuthn security keys are both strong choices.
+  
+  ### Use httpOnly Cookies, Not localStorage
+  
+  Storing a session token or JWT in `localStorage` is the most common Next.js auth mistake. Any JavaScript on the page — including code injected by an XSS attack — can read `localStorage`. `httpOnly` cookies are inaccessible to JavaScript, so they survive XSS.
+  
+  ```typescript
+  // ✅ Good — set session token in an httpOnly cookie (Server Action or API Route)
+  import { cookies } from 'next/headers';
+  
+  export async function setSessionCookie(token: string) {
+    const cookieStore = await cookies();
+    cookieStore.set('session', token, {
+      httpOnly: true,       // not readable by JavaScript
+      secure: true,         // only sent over HTTPS
+      sameSite: 'lax',      // CSRF protection
+      path: '/',
+      maxAge: 60 * 60 * 24, // 24 hours
+    });
+  }
+  ```
+  
+  ```typescript
+  // ❌ Bad — storing a token in localStorage exposes it to XSS
+  localStorage.setItem('token', userToken);
+  ```
+  
+  ### Implement Session Timeouts and Rotation
+  
+  Long-lived sessions are a liability. Set a reasonable `maxAge` (24 hours for a standard app; 15 minutes for admin tools). Rotate the session ID on privilege escalation — for example, after re-authentication. This limits the damage if a session token is stolen: it expires before an attacker can make significant use of it.
+  
+  ## 2\. Protecting API Routes and Server Actions
+  
+  ### Always Verify Authentication in the Handler
+  
+  Every API Route and Server Action must verify the user's identity, even if middleware already checked it. Middleware is for edge-level routing decisions and should not be your only auth check. (More on why in section 4.)
+  
+  ```typescript
+  // app/api/admin/users/route.ts
+  import { NextResponse } from 'next/server';
+  import { getSession } from '@/lib/auth';
+  
+  export async function GET() {
+    const session = await getSession();
+  
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+  
+    if (session.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+  
+    // safe to proceed
+    const users = await db.users.findMany();
+    return NextResponse.json(users);
+  }
+  ```
+  
+  Note the distinction: **401 Unauthorized** means the request has no valid identity (not authenticated). **403 Forbidden** means the user is authenticated but does not have permission. Returning the correct status code matters for client-side error handling.
+  
+  ### Add Rate Limiting
+  
+  Without rate limiting, your login endpoint, password-reset flow, and OTP verification are all open to brute-force attacks. Use an edge-compatible rate limiter like [@upstash/ratelimit](https://github.com/upstash/ratelimit-js) with Upstash Redis, or a middleware-level solution for self-hosted deployments.
+  
+  ```typescript
+  // lib/rate-limit.ts — using @upstash/ratelimit + @upstash/redis
+  import { Ratelimit } from '@upstash/ratelimit';
+  import { Redis } from '@upstash/redis';
+  
+  export const loginRatelimit = new Ratelimit({
+    redis: Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(5, '10 m'), // 5 requests per 10 minutes
+    analytics: true,
+  });
+  
+  // In your login Server Action:
+  // const { success } = await loginRatelimit.limit(ip);
+  // if (!success) throw new Error('Too many login attempts. Try again later.');
+  ```
+  
+  ### Validate All Inputs on the Server
+  
+  Client-side form validation is a UX convenience, not a security control. Any attacker can craft a raw HTTP request and bypass your frontend entirely. Use a schema validation library like [Zod](https://zod.dev/) to validate every input that reaches your Server Actions and API Routes.
+  
+  ```typescript
+  // app/actions/update-profile.ts
+  'use server';
+  import { z } from 'zod';
+  import { getSession } from '@/lib/auth';
+  
+  const UpdateProfileSchema = z.object({
+    displayName: z.string().min(1).max(64),
+    email: z.string().email(),
+  });
+  
+  export async function updateProfile(formData: FormData) {
+    const session = await getSession();
+    if (!session) throw new Error('Unauthorized');
+  
+    const parsed = UpdateProfileSchema.safeParse({
+      displayName: formData.get('displayName'),
+      email: formData.get('email'),
+    });
+  
+    if (!parsed.success) {
+      return { error: 'Invalid input', issues: parsed.error.issues };
+    }
+  
+    // safe to use parsed.data
+    await db.users.update({ where: { id: session.userId }, data: parsed.data });
+  }
+  ```
+  
+  ## 3\. Avoiding Common Vulnerabilities
+  
+  ### XSS via dangerouslySetInnerHTML
+  
+  **Warning:**`dangerouslySetInnerHTML` injects raw HTML into the DOM with no sanitization. If any part of that string comes from user input or an untrusted API, you have an XSS vulnerability. An attacker can inject `<script>` tags that steal session cookies, redirect users, or exfiltrate data.
+  
+  If you must render HTML from an external source, sanitize it first with [DOMPurify](https://github.com/cure53/DOMPurify). In Next.js (where components can run server-side), use `isomorphic-dompurify` — a wrapper that works in both Node.js and the browser:
+  
+  ```typescript
+  import DOMPurify from 'isomorphic-dompurify';
+  
+  // ✅ Sanitize before rendering
+  const clean = DOMPurify.sanitize(userProvidedHtml);
+  return <div dangerouslySetInnerHTML={{ __html: clean }} />;
+  ```
+  
+  ### Open Redirects
+  
+  A common login-flow pattern is redirecting users back to where they were: `/login?returnTo=/dashboard`. If you don't validate `returnTo`, an attacker can craft a link like `/login?returnTo=https://evil.com` and redirect users to a phishing site after login.
+  
+  ```typescript
+  // ✅ Only allow relative URLs as redirect targets
+  function getSafeRedirect(returnTo: string | null): string {
+    if (!returnTo || !returnTo.startsWith('/') || returnTo.startsWith('//')) {
+      return '/dashboard';
+    }
+    return returnTo;
+  }
+  ```
+  
+  ### CSRF and Server Actions
+  
+  Next.js Server Actions use `POST` requests and automatically compare the `Origin` header against the `Host` header, which blocks most cross-site request forgery attempts. For custom API Routes that modify state, you should still verify the `Origin` or use a CSRF token — especially if you rely on cookie-based auth. Note: always ensure `SameSite=Lax` or `Strict` is set on your session cookies, as this is an important additional layer of CSRF defense.
+  
+  ## 4\. Middleware Security and CVE-2025-29927
+  
+  **Critical: CVE-2025-29927 — Middleware Authorization Bypass**
+  
+  In March 2025, a CVSS 9.1 vulnerability was disclosed in Next.js. By sending an `x-middleware-subrequest` header, attackers could skip all middleware logic entirely — bypassing authentication checks on protected routes without any credentials. Affected versions: 11.1.4–12.3.4, 13.0.0–13.5.8, 14.0.0–14.2.24, and 15.0.0–15.2.2. Fixed in 12.3.5, 13.5.9, 14.2.25, and 15.2.3. **Update immediately if you haven't already.**
+  
+  The deeper lesson from CVE-2025-29927 is architectural: **middleware is not a security boundary**. It runs at the edge and is designed for routing and response shaping — not as a last line of defense. Your actual auth checks must live in your Route Handlers, Server Actions, and Data Access Layer.
+  
+  Think of middleware like the front door of a building: it can direct traffic and check IDs as a first pass, but every room inside should still have its own lock. If someone slips past the front door, no individual room should be left open.
+  
+  ```typescript
+  // middleware.ts — use for routing decisions only
+  import { NextRequest, NextResponse } from 'next/server';
+  
+  export function middleware(request: NextRequest) {
+    const session = request.cookies.get('session')?.value;
+  
+    // Redirect unauthenticated users to login
+    if (!session && request.nextUrl.pathname.startsWith('/dashboard')) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  
+    return NextResponse.next();
+  }
+  
+  // ⚠️ This is a UX redirect, NOT a security check.
+  // Always re-verify the session inside your actual handlers/actions.
+  ```
+  
+  ## 5\. Environment Variable Security
+  
+  Next.js has a simple but consequential rule: any environment variable prefixed with `NEXT_PUBLIC_` is bundled into the client-side JavaScript and visible to anyone who downloads your page. Variables without that prefix stay server-side only.
+  
+  ```bash
+  # .env.local
+  
+  # ✅ Server-only secrets (never sent to the browser)
+  DATABASE_URL=postgres://user:password@host/db
+  AUTH_SECRET=your-signing-secret
+  AUTHGEAR_CLIENT_SECRET=your-authgear-secret
+  
+  # ✅ Safe to expose — intentionally public config
+  NEXT_PUBLIC_APP_URL=https://yourapp.com
+  NEXT_PUBLIC_AUTHGEAR_CLIENT_ID=your-client-id
+  NEXT_PUBLIC_AUTHGEAR_ENDPOINT=https://your-project.authgear.cloud
+  ```
+  
+  Never commit `.env` or `.env.local` to version control. Add both to `.gitignore` and use your deployment platform's secret manager (Vercel Environment Variables, AWS Secrets Manager, etc.) for production values.
+  
+  ## 6\. Content Security Policy Headers
+  
+  A Content Security Policy (CSP) tells the browser which sources are allowed to load scripts, styles, images, and other resources. A well-configured CSP is a critical last line of defense against XSS — even if an attacker injects a `<script>` tag, the browser blocks it if the source isn't on your allowlist.
+  
+  Add security headers in `next.config.ts`:
+  
+  ```typescript
+  // next.config.ts
+  import type { NextConfig } from 'next';
+  
+  const ContentSecurityPolicy = `
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.authgear.com;
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: https:;
+    font-src 'self';
+    connect-src 'self' https://your-project.authgear.cloud;
+    frame-ancestors 'none';
+  `;
+  
+  const securityHeaders = [\
+    {\
+      key: 'Content-Security-Policy',\
+      value: ContentSecurityPolicy.replace(/\n/g, ' ').trim(),\
+    },\
+    {\
+      key: 'X-Frame-Options',\
+      value: 'DENY',\
+    },\
+    {\
+      key: 'X-Content-Type-Options',\
+      value: 'nosniff',\
+    },\
+    {\
+      key: 'Referrer-Policy',\
+      value: 'strict-origin-when-cross-origin',\
+    },\
+    {\
+      key: 'Permissions-Policy',\
+      value: 'camera=(), microphone=(), geolocation=()',\
+    },\
+    {\
+      key: 'Strict-Transport-Security',\
+      value: 'max-age=63072000; includeSubDomains; preload',\
+    },\
+  ];
+  
+  const nextConfig: NextConfig = {
+    async headers() {
+      return [\
+        {\
+          source: '/(.*)',\
+          headers: securityHeaders,\
+        },\
+      ];
+    },
+  };
+  
+  export default nextConfig;
+  ```
+  
+  Two notes on this config: First, `frame-ancestors 'none'` in the CSP and `X-Frame-Options: DENY` have the same effect — both are included here for compatibility with older browsers that don't support CSP. Second, `'unsafe-inline'` weakens your script-src policy. For a stricter setup without `'unsafe-inline'`, use nonce-based CSP — see the [official Next.js CSP guide](https://nextjs.org/docs/app/guides/content-security-policy).
+  
+  ## 7\. Using an Auth Platform
+  
+  Implementing authentication securely from scratch is hard. You need to handle session management, token rotation, MFA, passkeys, brute-force protection, and more — and every detail has to be right. That's where an authentication platform like [Authgear](https://authgear.com/) helps. Authgear provides a drop-in auth layer for Next.js that handles passkeys, TOTP MFA, social login, and session management out of the box — so you can focus on your app rather than the auth infrastructure. See the [Next.js quickstart guide](https://docs.authgear.com/get-started/regular-web-app/nextjs) to get started in under 15 minutes.
+  
+  ## Next.js Security Checklist
+  
+  | Check | Status |
+  | --- | --- |
+  | Next.js updated to 12.3.5, 13.5.9, 14.2.25+, or 15.2.3+ (CVE-2025-29927 patched) | ✅ / ❌ |
+  | Session tokens stored in `httpOnly`, `Secure`, `SameSite=Lax` cookies | ✅ / ❌ |
+  | No auth tokens stored in `localStorage` or `sessionStorage` | ✅ / ❌ |
+  | Passkeys or MFA enforced for user accounts | ✅ / ❌ |
+  | Session expiry configured (24h or less for standard apps) | ✅ / ❌ |
+  | Every API Route and Server Action re-verifies auth (not middleware-only) | ✅ / ❌ |
+  | Server Actions and API Routes validate inputs with Zod or equivalent | ✅ / ❌ |
+  | Rate limiting on login, OTP, and password-reset endpoints | ✅ / ❌ |
+  | `dangerouslySetInnerHTML` is either avoided or sanitized with DOMPurify | ✅ / ❌ |
+  | Open redirects prevented — `returnTo` validated as a relative URL | ✅ / ❌ |
+  | No secrets in `NEXT_PUBLIC_` environment variables | ✅ / ❌ |
+  | `.env` and `.env.local` files are in `.gitignore` | ✅ / ❌ |
+  | CSP header configured in `next.config.ts` | ✅ / ❌ |
+  | `X-Frame-Options: DENY` and/or `frame-ancestors 'none'` in CSP set | ✅ / ❌ |
+  | `X-Content-Type-Options: nosniff` header set | ✅ / ❌ |
+  | `Strict-Transport-Security` header set (HTTPS enforced) | ✅ / ❌ |
+  | Dependencies audited with `npm audit` or equivalent | ✅ / ❌ |
+  | Admin routes protected both in middleware AND in route handlers | ✅ / ❌ |
+  
+  Latest articles
+  
+  [![](https://cdn.prod.website-files.com/60658b47b03f0c77e8c14884/69caab816ba2e16909dcc643_featured-image-web.webp)\\
+  \\
+  Engineering\\
+  \\
+  **Supabase Auth vs Authgear for Next.js: Which Should You Choose?** \\
+  \\
+  ![](https://www.authgear.com/post/nextjs-security-best-practices)\\
+  \\
+  March 27, 2026](https://www.authgear.com/post/supabase-vs-authgear-nextjs)
+  
+  [![](https://cdn.prod.website-files.com/60658b47b03f0c77e8c14884/69c6a2feb3b37d4f05a4fa44_featured-image-web.webp)\\
+  \\
+  Engineering\\
+  \\
+  **Next.js Session Management: Cookies, JWTs, and Server Sessions (2026)** \\
+  \\
+  ![](https://www.authgear.com/post/nextjs-security-best-practices)\\
+  \\
+  March 27, 2026](https://www.authgear.com/post/nextjs-session-management)
+  
+  [![](https://cdn.prod.website-files.com/60658b47b03f0c77e8c14884/69c6a2c848b747bc82da4a40_featured-image-web.webp)\\
+  \\
+  Engineering\\
+  \\
+  **Next.js Authentication: Complete Guide for App Router (2026)** \\
+  \\
+  ![](https://www.authgear.com/post/nextjs-security-best-practices)\\
+  \\
+  March 27, 2026](https://www.authgear.com/post/nextjs-authentication-guide)
+  
+  Your privacy is our priority
+  
+  Authgear understands the importance of data privacy, especially in today's digital landscape. In line with our [Privacy Policy](https://www.authgear.com/data-privacy), we take your privacy seriously and are committed to being transparent about how we collect your information.
+  
+  ‍
+  
+  By clicking "Accept," you consent to the use of all cookies on our site. However, you have the right to choose which types of cookies you allow. Simply click on "Manage Settings" to customize your preferences.
+  
+  [Accept](https://www.authgear.com/post/nextjs-security-best-practices#) [Deny](https://www.authgear.com/post/nextjs-security-best-practices#) [Manage settings](https://www.authgear.com/post/nextjs-security-best-practices#)
+  
+  Preferences
+  
+  Privacy is important to us, so you have the option of disabling certain types of storage that may not be necessary for the basic functioning of the website. Blocking categories may impact your experience on the website.
+  
+  [Accept all cookies](https://www.authgear.com/post/nextjs-security-best-practices#)  [![](https://cdn.prod.website-files.com/60658b46b03f0cf83ac1485d/661c0dbc0872119944cc8c89_np_close_25798_27313D.svg)](https://www.authgear.com/post/nextjs-security-best-practices#)
+  
+  Essential
+  
+  These items are required to enable basic website functionality.
+  
+  Always active
+  
+  Marketing
+  
+  These items are used to deliver advertising that is more relevant to you and your interests.
+  
+  Personalization
+  
+  These items allow the website to remember choices you make (such as your user name, language, or the region you are in) and provide enhanced, more personal features.
+  
+  Analytics
+  
+  These items help the website operator understand how its website performs, how visitors interact with the site, and whether there may be technical issues.
+  
+  Thank you! Your submission has been received!
+  
+  Oops! Something went wrong while submitting the form.
+  
+  ![](https://cdn.prod.website-files.com/60658b46b03f0cf83ac1485d/661c0dbc0872119944cc8c87_np_cookie_80793_FFFFFF.svg)
+  --- End Content ---
+
+Secure Next.js Auth: 2026 Patterns & Best Practices
+  URL: https://createbytes.com/insights/nextjs-authentication-authorization-patterns
+  Learn the latest Next.js auth patterns for 2026. Explore server-side auth, Google & Firebase integration, and web security best practices to ...
+
+  --- Content ---
+  ![Randomly placed star](https://createbytes.com/star.svg)![Randomly placed star](https://createbytes.com/star.svg)![Randomly placed star](https://createbytes.com/star.svg)![Randomly placed star](https://createbytes.com/star.svg)![Randomly placed star](https://createbytes.com/star.svg)![Randomly placed star](https://createbytes.com/star.svg)![Randomly placed star](https://createbytes.com/star.svg)![Randomly placed star](https://createbytes.com/star.svg)![Randomly placed star](https://createbytes.com/star.svg)![Randomly placed star](https://createbytes.com/star.svg)
+  
+  # Authentication and Authorization Patterns in Next.js
+  
+  ![banner](https://createbytes.com/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FBanner.9708a10d.png&w=3840&q=75)
+  
+  Feb 19, 20263 minute read
+  
+  # Authentication and Authorization Patterns in Next.js
+  
+  In the fast-paced world of web development, user expectations are higher than ever. They demand applications that are not only lightning-fast and visually engaging but also impeccably secure. Next.js has firmly established itself as a leading framework for building such modern web experiences, but with its power comes the critical responsibility of managing user identity. This is where a robust strategy for Next.js auth becomes non-negotiable. However, authentication is only one side of the coin. It’s intrinsically linked to the broader, more complex challenge of web security. A flawed authentication system isn't just an inconvenience; it's a gaping hole in your application's defenses, inviting data breaches and eroding user trust.
+  
+  This comprehensive guide will navigate the essential authentication and authorization patterns within the Next.js ecosystem. We'll move beyond simple login forms to explore sophisticated strategies that leverage the full power of the framework, from the latest App Router features to battle-tested third-party solutions. More importantly, we'll frame every discussion through the crucial lens of web security, ensuring that the patterns you implement are not just functional but fortified. We will cover everything from handling a Next.js Google auth flow to implementing a Next.js Firebase auth solution, providing you with the knowledge to build applications that are as secure as they are seamless.
+  
+  ## Understanding the Core Concepts: Authentication vs. Authorization
+  
+  Before diving into complex patterns, it’s vital to clarify two fundamental concepts that are often used interchangeably but have distinct meanings: Authentication (AuthN) and Authorization (AuthZ). Getting this distinction right is the first step toward a secure application architecture.
+  
+  **Authentication (AuthN)** is the process of verifying a user's identity. It answers the question, “Who are you?” This is the classic login screen, where a user provides credentials—like a username and password, a social login confirmation (e.g., Next.js Google auth), or a biometric scan—to prove they are who they claim to be. A successful authentication process typically results in a session or token that identifies the user in subsequent requests.
+  
+  **Authorization (AuthZ)** is the process that follows authentication. It determines what an authenticated user is allowed to do. It answers the question, “What are you permitted to access?” For example, an authenticated user might be authorized to view their own profile but not the admin dashboard. An administrator, while authenticated through the same system, would have a different level of authorization, granting them access to privileged features.
+  
+  In a Next.js context, you might authenticate a user on the server and create a session cookie. Then, for every request to a protected route or API, you would perform an authorization check to see if that user's role (e.g., 'admin', 'subscriber') grants them permission to perform the requested action.
+  
+  ## Why is Secure Authentication Crucial in Next.js Applications?
+  
+  Secure authentication is crucial in Next.js because it serves as the primary defense for user data and application functionality. It prevents unauthorized access, protects sensitive information, and is fundamental to building user trust. Given Next.js's hybrid rendering capabilities, a robust Next.js auth system must secure data across different environments—server components, client components, and API routes—to maintain a cohesive and effective web security posture.
+  
+  The risks associated with a poorly implemented authentication system are severe. They range from account takeover (ATO) attacks, where a malicious actor gains control of a user's account, to widespread data breaches that can expose the personal information of your entire user base. In the context of Next.js, vulnerabilities can exist in multiple places. An insecure API Route could leak data, a misconfigured client-side flow could expose tokens, and improper session management on the server could lead to session hijacking. Therefore, a holistic approach to Next.js auth is not just a feature; it's a foundational requirement for any serious application.
+  
+  ### Key Takeaways: The Importance of Auth
+  
+  - _**Data Protection:** Authentication is the first line of defense in protecting sensitive user and business data._
+  - _**Trust and Reputation:** A secure login experience builds user confidence and protects your brand's reputation. A breach can cause irreparable damage._
+  - _**Access Control:** It's the prerequisite for authorization, enabling you to create tiered access levels for different user roles._
+  - _**Compliance:** For industries like_ [_fintech_](https://createbytes.com/industries/fintech) _and healthtech, strong authentication is often a regulatory requirement (e.g., GDPR, HIPAA)._
+  
+  ## Key Authentication Patterns in Next.js
+  
+  Next.js's flexibility allows for several authentication patterns, each with its own trade-offs. The introduction of the App Router and Server Components has shifted best practices toward more secure, server-centric approaches.
+  
+  ### 1\. Server-Side Authentication with the App Router & Server Actions
+  
+  This is the modern, recommended pattern for Next.js auth. By leveraging Server Components and Server Actions, the entire authentication process can happen on the server, significantly enhancing security. In this model, user credentials from a login form are sent directly to a Server Action. This server-side function then validates the credentials, interacts with the database, and, upon success, creates a secure, HttpOnly session cookie.
+  
+  The primary benefit is that sensitive information like passwords or API keys never gets exposed to the client-side browser. This drastically reduces the attack surface for threats like Cross-Site Scripting (XSS). Furthermore, because the logic lives on the server, it can be tightly integrated with your database and other backend services, leading to a more streamlined and performant architecture. This pattern represents a paradigm shift away from client-heavy authentication flows and toward a more robust, secure-by-default model.
+  
+  ### 2\. Client-Side Authentication with Third-Party Providers
+  
+  While server-centric patterns are gaining traction, client-side flows, especially for social logins, remain incredibly popular due to their convenience. This pattern typically involves using a third-party identity provider to handle the heavy lifting of authentication.
+  
+  #### Implementing Next.js Google Auth
+  
+  Integrating a _Next.js Google auth_ flow is a common requirement for consumer-facing applications. It follows the OAuth 2.0 protocol, where your application redirects the user to Google's login page. After the user authenticates with Google, they are redirected back to your application with an authorization code. Your application's backend then securely exchanges this code for an access token and user profile information. This pattern improves user experience by eliminating the need for users to create and remember another password. Libraries like Auth.js (formerly NextAuth.js) make this flow incredibly easy to implement securely.
+  
+  #### Leveraging Next.js Firebase Auth
+  
+  For developers seeking a comprehensive Backend-as-a-Service (BaaS) solution, _Next.js Firebase auth_ is an excellent choice. Firebase Authentication provides a complete identity solution, supporting email/password, phone numbers, and a wide range of federated identity providers like Google, Facebook, and Twitter. The key advantage of Firebase is its managed infrastructure. It handles user storage, password hashing, token issuance, and scaling for you. This can significantly accelerate development time, especially for startups and projects with limited backend resources. Integrating it with Next.js involves using the Firebase SDK to manage the auth state on the client and validating Firebase ID tokens on your server (e.g., in API Routes or Server Actions) to protect backend resources.
+  
+  ### 3\. The Hybrid Approach: Using Auth.js (NextAuth.js)
+  
+  Auth.js has become the de facto standard for _Next.js auth_ for a reason: it masterfully blends server-side security with client-side convenience. It's not a specific pattern but a powerful library that enables you to implement almost any authentication strategy with ease and security.
+  
+  Auth.js provides a simple, unified API to configure multiple authentication providers, including credentials (email/password), OAuth (like Google or GitHub), and even email-based magic links. It automatically handles secure cookie management, CSRF protection, JWT session management, and token rotation. It is fully compatible with the App Router, Server Components, and Server Actions, allowing you to fetch session data securely on the server or the client. By abstracting away the low-level complexities, Auth.js allows developers to focus on application features while resting assured that their authentication logic follows industry best practices.
+  
+  ## Implementing Authorization: Protecting Routes and Data
+  
+  Once a user is authenticated, the next critical step is authorization: controlling what they can see and do. In Next.js, this means protecting pages, layouts, and API endpoints from unauthorized access.
+  
+  ### What is a Next.js Auth HOC (Higher-Order Component)?
+  
+  A Next.js Auth HOC is a function that wraps a page or component to manage access control. It checks the user's authentication status or role before rendering the wrapped component. If the user lacks the necessary permissions, the HOC can redirect them to a login page or show an "access denied" message. While this pattern was very common with the Pages Router for client-side protection, it has become less central in the App Router era.
+  
+  In the modern App Router, the same goal is more effectively achieved using Middleware or by checking the session directly within a shared Layout component. Middleware is particularly powerful as it runs on the server before a request is completed, allowing you to protect entire route segments (e.g., everything under _/dashboard_) with a single piece of logic. This server-side approach is more secure and performant than a client-side HOC.
+  
+  ### Role-Based Access Control (RBAC) in Next.js
+  
+  Role-Based Access Control (RBAC) is a common and effective authorization strategy. Instead of assigning permissions to individual users, you assign permissions to roles (e.g., 'admin', 'editor', 'viewer'), and then assign roles to users. This simplifies permission management significantly.
+  
+  To implement RBAC in Next.js, you would typically:
+  
+  1. Store the user's role in your database.
+  2. Include the role in the user's session token (e.g., a JWT or the data stored by Auth.js) upon login.
+  3. Check for the required role in your protection logic. This can be done in Middleware, Server Components that fetch sensitive data, or API Routes. For example, a request to _/api/admin/users_ would first verify the user is authenticated and then check if their session token contains the role 'admin'.
+  
+  ## The Critical Link: Next.js Auth and Web Security
+  
+  A discussion about _Next.js auth_ is incomplete without a deep dive into _web security_. Your authentication system is the gatekeeper of your application, and its strength directly determines your overall security posture. A misconfiguration here can undermine all other security measures you have in place.
+  
+  ### Common Web Security Vulnerabilities and How Next.js Auth Helps Mitigate Them
+  
+  Let's explore some common vulnerabilities and how a proper _Next.js auth_ implementation helps defend against them.
+  
+  - **Cross-Site Scripting (XSS):** This attack involves injecting malicious scripts into a web page viewed by other users. While Next.js (via React) automatically escapes data rendered in JSX to prevent this, vulnerabilities can still arise from user-generated content. A secure auth system contributes by ensuring that only authenticated and authorized users can submit content in the first place, reducing the vectors for malicious input.
+  - **Cross-Site Request Forgery (CSRF):** This attack tricks an authenticated user into submitting a malicious request. For example, a user might click a link on a malicious site that secretly triggers an action on your site, like changing their email address. Modern auth libraries like Auth.js provide built-in CSRF protection by using synchronized tokens, ensuring that any state-changing request (like a form submission via a Server Action) originated from your own site.
+  - **Session Hijacking:** If an attacker can steal a user's session cookie, they can impersonate that user. The best defense is using _HttpOnly_ cookies for session tokens. This flag prevents client-side JavaScript from accessing the cookie, making it immune to theft via XSS. Server-centric auth patterns and libraries like Auth.js configure this by default.
+  - **Insecure Direct Object References (IDOR):** This is an authorization failure where an attacker can access data they shouldn't by simply changing a parameter in the URL (e.g., changing . _../orders/123_ to _.../orders/124_). This highlights why authentication alone is not enough. Your backend logic must always verify that the authenticated user is **authorized** to access the specific resource they are requesting. For example: _SELECT \* FROM orders WHERE id = 124 AND userId = \[authenticated\_user\_id\]_.
+  
+  ### Industry Insight: The Cost of Insecurity
+  
+  _According to IBM's 2023 Cost of a Data Breach Report, the global average cost of a data breach reached an all-time high of $4.45 million. The report also identified compromised credentials as the most common initial attack vector, responsible for 15% of breaches. This starkly illustrates the immense financial and reputational risk of a weak authentication system, making investment in robust web security not just a technical necessity but a business imperative._
+  
+  ## Advanced Patterns and Future-Proofing Your App
+  
+  The world of digital identity is constantly evolving. To build applications that remain secure and user-friendly, it's important to be aware of emerging trends.
+  
+  ### Passwordless Authentication
+  
+  The industry is steadily moving away from passwords, which are often weak, reused, and susceptible to phishing. Passwordless methods offer a superior combination of user experience and security. Key methods include:
+  
+  - **Magic Links:** Users enter their email address and receive a one-time-use link to sign in.
+  - **WebAuthn and Passkeys:** This is the new gold standard. It allows users to authenticate using device-based biometrics (like Face ID or a fingerprint sensor) or hardware security keys. It is highly resistant to phishing and provides a seamless login experience.
+  
+  Libraries like Auth.js and services like Firebase are increasingly adding first-class support for Passkeys, making it easier than ever to integrate this future-proof technology into your Next.js application.
+  
+  ### Survey Says: The Rise of Passwordless
+  
+  _A recent survey by the FIDO Alliance revealed that a significant majority of users who have tried passwordless authentication methods prefer them over traditional passwords and legacy multi-factor authentication. This strong user preference is a powerful incentive for businesses, especially in competitive sectors like_ [_ecommerce_](https://createbytes.com/industries/ecommerce) _, to adopt these technologies to reduce friction and increase conversion rates._
+  
+  ### How Do You Handle Authentication in a Microservices Architecture?
+  
+  In a microservices architecture with a Next.js frontend, authentication is typically centralized in a dedicated auth service or an API Gateway. The Next.js application authenticates against this service to obtain a JSON Web Token (JWT). This JWT is then included in the authorization header of every subsequent request to other microservices, which independently validate the token's signature and claims before processing the request.
+  
+  This token-based approach decouples authentication from your individual services, allowing them to be developed and scaled independently. The Next.js app acts as the client, responsible for acquiring, storing (securely), and refreshing the JWT. Architecting such a system requires careful planning around token validation, key management, and handling token expiration. This is an area where our [custom development services](https://createbytes.com/services/development) can provide significant value, designing a scalable and secure identity infrastructure tailored to your specific needs.
+  
+  ### Action Checklist: Building a Secure Next.js Auth System
+  
+  - _Choose the right auth pattern for your project: server-centric, third-party, or a hybrid approach._
+  - _Select a battle-tested library like Auth.js or a BaaS like Next.js Firebase Auth to avoid reinventing the wheel._
+  - _Always validate and sanitize user input on the server, especially with Server Actions._
+  - _Implement strong authorization logic (RBAC) to protect sensitive data and routes using Middleware or server-side checks._
+  - _Configure secure cookie settings (HttpOnly, Secure, SameSite=Lax/Strict) for all session tokens._
+  - _Ensure you have CSRF protection for all state-changing operations._
+  - _Regularly audit dependencies for security vulnerabilities using tools like npm audit._
+  - _Plan for the future by exploring passwordless authentication with Passkeys._
+  
+  ## Conclusion: Your Partner in Secure Application Development
+  
+  Mastering authentication and authorization in Next.js is a journey that blends user experience with uncompromising security. As we've seen, the framework provides powerful tools and patterns, but their effective implementation requires a deep understanding of the underlying web security principles. From choosing between server-side and client-side patterns to implementing granular role-based access control and defending against common vulnerabilities, every decision impacts your application's integrity and your users' trust.
+  
+  A solid _Next.js auth_ strategy is the bedrock of your application's defense. It's not a feature to be tacked on at the end of a project but a core architectural component that demands careful planning and expert execution. The landscape is complex, with evolving threats and emerging technologies like Passkeys changing the game.
+  
+  Navigating these complexities is where a trusted partner can make all the difference. At CreateBytes, our [expert development team](https://createbytes.com/services/development) specializes in building secure, scalable, and high-performance Next.js applications that put security first. Whether you're architecting a new platform from the ground up or need to fortify an existing one, we have the expertise to help you implement the right authentication and authorization patterns for your unique business needs. Contact us today to start a conversation about securing your digital future.
+  
+  * * *
+  
+  ## FAQ
+  
+  ### What is the difference between authentication and authorization in Next.js?
+  
+  ### What is the recommended Next.js auth pattern for 2025?
+  
+  ### How can I implement Google or Firebase auth in a Next.js app?
+  
+  ### How does a proper Next.js auth system improve web security?
+  
+  ### What is the modern alternative to a Next.js Auth HOC in the App Router?
+  
+  ## More  Blogs
+  
+  [**What is Web and Application Design and Development?**](https://createbytes.com/insights/what-is-web-and-application-design-and-development)
+  
+  [Continue Reading](https://createbytes.com/insights/what-is-web-and-application-design-and-development)
+  
+  [**What is Machine Learning with its Uses and Types?**](https://createbytes.com/insights/what-is-machine-learning-with-its-uses-and-types)
+  
+  [Continue Reading](https://createbytes.com/insights/what-is-machine-learning-with-its-uses-and-types)
+  
+  ### Go-to-Market Strategy & User-Centric Deployment
+  
+  Focus on scaling, not launch worries. We guarantee a smooth, tested, and validated deployment of your digital product,
+  ensuring an immediate “WOW moment” for your target audience.
+  
+  ![service icon](https://createbytes.com/_next/static/media/servicesIcon.fa4dc5cf.svg)
+  
+  Vision API
+  
+  Price starting from $129
+  
+  Discover the key insights that guide your decision-making process before rebranding your business or products.
+  
+  ![service icon](https://createbytes.com/_next/static/media/workingProductsDesign2.36bbb75e.svg)
+  
+  MVP Builder
+  
+  Book your consultation call now
+  
+  Preparing for an investor pitch or planning to launch your startup?? Don't miss out on making your startup launch a success.
+  
+  ![service icon](https://createbytes.com/_next/static/media/workingProductsDesign.a4564fe4.svg)
+  
+  Brand Watch
+  
+  Price starting from $500
+  
+  Maintain your brand presence with the #1 AI-driven marketing agency that handles all your online visibility and growth through social media design services.
+  
+  View More
+  
+  Unlock Expert Insights:
+  
+  Subscribe to Our Tech Newsletter
+  
+  Stay ahead of the curve. Get exclusive white papers, case studies, and AI/ML and Product Engineering trend reports delivered straight to your inbox.
+  
+  ![input submit icon](https://createbytes.com/_next/static/media/InputGoIcon.8c82767b.svg)
+  
+  Ready to Start Your AI Digital Product Journey?
+  
+  Contact Us Today
+  
+  © 2026 CreateBytes, All Rights Reserved
+  
+  [About Us](https://createbytes.com/about)
+  
+  [Case Studies](https://createbytes.com/portfolio)
+  
+  [Blogs](https://createbytes.com/insights)
+  
+  [Privacy Policy](https://createbytes.com/privacy-policy)
+  
+  [About Us](https://createbytes.com/about)
+  
+  [Case Studies](https://createbytes.com/portfolio)
+  
+  [Blogs](https://createbytes.com/insights)
+  
+  [Privacy Policy](https://createbytes.com/privacy-policy)
+  
+  [About Us](https://createbytes.com/about)
+  
+  [Case Studies](https://createbytes.com/portfolio)
+  
+  [Blogs](https://createbytes.com/insights)
+  
+  [Privacy Policy](https://createbytes.com/privacy-policy)
+  
+  [LinkedIn](https://www.linkedin.com/company/createbytes/)
+  
+  [Instagram](https://www.instagram.com/createbytes/)
+  
+  [Facebook](https://www.facebook.com/createbytes)
+  
+  © 2026 CreateBytes, All Rights Reserved
+  
+  ![img](https://createbytes.com/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FfooterIcon.7a51e581.png&w=1200&q=75)
+  
+  ![img](https://createbytes.com/_next/static/media/Contact1.e32d17e9.svg)
+  --- End Content ---
+
+What's your preferred auth setup in 2026 for Next.js? : r/nextjs - Reddit
+  URL: https://www.reddit.com/r/nextjs/comments/1r6ak7z/whats_your_preferred_auth_setup_in_2026_for_nextjs/
+  For single-app Next.js, Auth.js/NextAuth with secure cookie-based sessions is usually the least painful; for multi-app + central auth, a hosted ...
+
+Creating a Login Feature Using Next.js v16 and Firebase ... - Medium
+  URL: https://medium.com/@unosega/creating-a-login-feature-using-next-js-v16-and-firebase-authentication-fe280331900a
+  In this article, we will try to create a simple login feature using Next.js and Firebase Authentication. This article is intended for ...
+
+  --- Content ---
+  [Sitemap](https://medium.com/sitemap/sitemap.xml)
+  
+  [Open in app](https://play.google.com/store/apps/details?id=com.medium.reader&referrer=utm_source%3DmobileNavBar&source=post_page---top_nav_layout_nav-----------------------------------------)
+  
+  Sign up
+  
+  [Sign in](https://medium.com/m/signin?operation=login&redirect=https%3A%2F%2Fmedium.com%2F%40unosega%2Fcreating-a-login-feature-using-next-js-v16-and-firebase-authentication-fe280331900a&source=post_page---top_nav_layout_nav-----------------------global_nav------------------)
+  
+  [Medium Logo](https://medium.com/?source=post_page---top_nav_layout_nav-----------------------------------------)
+  
+  Get app
+  
+  [Write](https://medium.com/m/signin?operation=register&redirect=https%3A%2F%2Fmedium.com%2Fnew-story&source=---top_nav_layout_nav-----------------------new_post_topnav------------------)
+  
+  [Search](https://medium.com/search?source=post_page---top_nav_layout_nav-----------------------------------------)
+  
+  Sign up
+  
+  [Sign in](https://medium.com/m/signin?operation=login&redirect=https%3A%2F%2Fmedium.com%2F%40unosega%2Fcreating-a-login-feature-using-next-js-v16-and-firebase-authentication-fe280331900a&source=post_page---top_nav_layout_nav-----------------------global_nav------------------)
+  
+  ![](https://miro.medium.com/v2/resize:fill:32:32/1*dmbNkD5D-u45r44go_cf0g.png)
+  
+  # Creating a Login Feature Using Next.js v16 and Firebase Authentication
+  
+  [![Juwono (ジュウｵノ)](https://miro.medium.com/v2/resize:fill:32:32/1*ImqPS5I1arB3t2NmkEA5Pg.jpeg)](https://medium.com/@unosega?source=post_page---byline--fe280331900a---------------------------------------)
+  
+  [Juwono (ジュウｵノ)](https://medium.com/@unosega?source=post_page---byline--fe280331900a---------------------------------------)
+  
+  19 min read
+  
+  ·
+  
+  Feb 18, 2026
+  
+  5
+  
+  1
+  
+  [Listen](https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2Fplans%3Fdimension%3Dpost_audio_button%26postId%3Dfe280331900a&operation=register&redirect=https%3A%2F%2Fmedium.com%2F%40unosega%2Fcreating-a-login-feature-using-next-js-v16-and-firebase-authentication-fe280331900a&source=---header_actions--fe280331900a---------------------post_audio_button------------------)
+  
+  Share
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*Cg9C6-ZaG1jzndikMYrLJg.png)
+  
+  In this article, we will try to create a simple login feature using Next.js and Firebase Authentication. This article is intended for beginners who are new to Next.js as a framework for work or those who want to start building a web app based on the React framework and understand the general structure and workflow of Next.js.
+  
+  Basically, [**Next.js**](https://nextjs.org/docs) is a React framework based on SSR (Server‑Side Rendering). Unlike React.js, which uses CSR (Client‑Side Rendering), Next.js works like most full‑stack frameworks (such as Laravel, Spring Boot, etc.) that adopt an **opinionated framework** approach.
+  
+  **Prerequisite**
+  
+  - Understanding of basic web concepts (HTML, CSS, and JavaScript)
+  - Understanding of [React](https://react.dev/learn) structure and its components
+  - Node.js version 20+ (If your computer does not have it installed yet, please download and install Node.js from the following link: [https://nodejs.org/en/download](https://nodejs.org/en/download))
+  - A code editor ( [Visual Studio Code](https://code.visualstudio.com/))
+  - An active Gmail account (for logging into Firebase Console)
+  
+  **In this article, you will learn about:**
+  
+  - How to set up a project using Next.js version 16.
+  - How to create UI components in Next.js.
+  - How to integrate Firebase Authentication into our web app.
+  - How to build a login feature using Firebase Authentication.
+  
+  Before we begin, please download and install the following extensions in VS Code (go to the Extensions menu → then search for each extension → click install) to help you work on your Next.js project:
+  
+  - **Prettier — Code formatter**
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*HESE79hvBhMWzs8ZlctC4g.png)
+  
+  - **ES7+ React/Redux/React-Native snippets**
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*VQWLrMjos5LQBKOxgZ_Tlw.png)
+  
+  - **JavaScript and TypeScript Nightly**
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*0G9QJCFG435Cjtm__PB-lg.png)
+  
+  - **Tailwind CSS IntelliSense**
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*ac9DhquAG68RyIHLFZLokQ.png)
+  
+  ## Set up a project using Next.js
+  
+  First, create a folder named _‘_ **_nextjs-firebase_** _’_ on your computer to store the web app project you want to build. Then, open Visual Studio Code (VS Code) and open that folder inside VS Code.
+  
+  Next, open the terminal in VS Code by clicking _Terminal → New Terminal_ (or press **Ctrl + \`** on your keyboard) to install the Next.js framework.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*n484sDAeEbaKeEa5hJOgXg.png)
+  
+  We will install Next.js version 16 (the latest version for now) using the instructions provided directly by the official [Next.js website](https://nextjs.org/docs/app/getting-started/installation).
+  
+  - In the VS Code terminal, make sure the last path shown is the name of your project folder ( _nextjs-firebase_).
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*syZbDlnYXv6XcLJdrrWoCA.png)
+  
+  - Install Next.js using the following command:
+  
+  ```
+  npx create-next-app@latest .
+  ```
+  
+  > **Note:** The dot (`.`) means you are installing Next.js in the current/active folder (which is **_nextjs-firebase_**).
+  
+  - Then, select _‘_ **_Yes, use recommended defaults’,_** and press Enter.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*G5kHLJyUAup-dMF_ocYRyQ.png)
+  
+  - Wait a few minutes until the installation process is successful or completed. Once it finishes, the result will look like the example shown in the image below.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*VqfGzIzu_pTSyOJn5-c3sQ.png)
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*YX3Fax5OQLkZr6hFAzOQ6A.png)
+  
+  - After the installation is complete, you will see that several folders and files have been automatically created inside your project folder.
+  
+  ![](https://miro.medium.com/v2/resize:fit:311/1*sp0fOTk4QLReFtTrx3bLsg.png)
+  
+  Don’t worry. For now, we will learn the structure of the folders and files inside our Next.js project. Below are the functions of several folders and files that typically appear in a Next.js project structure:
+  
+  `.next/` **folder**
+  
+  - This folder is the build output (auto‑generated by Next.js). It is used to store compiled results, cache, server build artifacts, output bundling, and optimized static files.
+  - You should not edit or commit this folder to Git.
+  - Typically, when you run **npm run build** or **npm run dev**, this folder will be updated or regenerated automatically.
+  
+  `app/` **folder**
+  
+  - This folder is the core of the App Router and the main component of the application. All routing, layouts, server components, client components, and nested routes are defined here.
+  - Inside the `app/` folder, there is a file called `layout.tsx`, which serves as the root layout or base structure of the application. The `layout.tsx` file functions as the main template and wraps all pages.
+  
+  `page.tsx` **file (inside the**`app/` **folder)**
+  
+  - This file is the default page for the `/` route. When the website is first opened, the default route of the application is `/`.
+  - Every folder inside `app/` that contains a `page.tsx` file automatically becomes 1 route. Examples:
+  
+  ```
+  app/page.tsx        → /
+  app/about/page.tsx  → /about
+  app/login/page.tsx  → /login
+  ```
+  
+  `globals.css` **file (inside the**`app/` **folder)**
+  
+  - This is the global CSS file, used for global styling, CSS reset, Tailwind base layers, and custom global styles.
+  - The file is usually imported inside `layout.tsx`:
+  
+  ```
+  import './globals.css'
+  ```
+  
+  `favicon.ico` **file (inside the**`app/` **folder)**
+  
+  - This is the browser tab icon (the icon displayed on the browser tab).
+  - You can replace this file with another format such as SVG or PNG.
+  
+  `public/` **folder**
+  
+  - This folder contains static assets.
+  - Files inside this folder are served directly without processing (e.g., images, fonts, PDFs, static JSON files, etc.).
+  
+  `.gitignore` **file**
+  
+  - This file specifies which files or folders should not be tracked by Git (hidden or excluded from your GitHub repository).
+  
+  `eslint.config.mjs` **file**
+  
+  - This file contains ESLint configuration.
+  - It is used to define linting rules, coding standards, and static error detection. By default, Next.js includes the preset `next/core-web-vitals`.
+  
+  `next-env.d.ts` **file**
+  
+  - This is an auto‑generated TypeScript file.
+  - You should not edit it manually, as it contains type definitions required by Next.js.
+  
+  `next.config.ts` **file**
+  
+  - This is the main configuration file for Next.js.
+  - It is used for custom webpack configuration, environment variables, Image optimization domains, redirects & rewrites, output modes (standalone, edge, etc.), and experimental features.
+  - This file is very important and can be edited according to your app’s needs by following the official Next.js documentation: [https://nextjs.org/docs/pages/api-reference/config/typescript](https://nextjs.org/docs/pages/api-reference/config/typescript)
+  
+  `tsconfig.json` **file**
+  
+  - This file contains TypeScript configuration.
+  - It is used for path alias, strict mode, ES version targeting, and module resolution.
+  
+  To run the Next.js application project, you can type the following command:
+  
+  ```
+  npm run dev
+  ```
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*fZ80mwxAqCpAZUxzJPLOkQ.png)
+  
+  This command will run the application on port 3000 ( **_http://localhost:3000_**) with the default page displayed from the `app/page.tsx` file, as shown below:
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*auAelXjafUnlzGsHdVJ9zw.png)
+  
+  ## Creating UI Components in Next.js
+  
+  As explained earlier, the main folder of our application is located inside the `app/` folder. This is where we will create the components for the login page of the application we are building.
+  
+  To create UI components in Next.js, we typically use a library called [**shadcn/ui**](https://ui.shadcn.com/docs). This library is very popular and has become a standard choice among Next.js developers when building UI components for their web applications.
+  
+  We will set up and install shadcn/ui based on the official documentation from its website ( [https://ui.shadcn.com/docs/installation/next](https://ui.shadcn.com/docs/installation/next)).
+  
+  - First, install shadcn/ui through the VS Code terminal by typing the following command:
+  
+  ```
+  npx shadcn@latest init
+  ```
+  
+  > Note: To install shadcn/ui, it is highly recommended to stop the running Next.js project first. To stop it, you can press **Ctrl + C** on your keyboard, and the web app will stop running.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*JA9PpZd_DtE5cKnM4mZqag.png)
+  
+  - Type `y` to continue the shadcn/ui setup installation in Next.js.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*EtjNwsbiJeORY5UYuuB2sg.png)
+  
+  - Select _‘Neutral’_ as the base color. For the base color guide from shadcn/ui, you can check the following link: [https://ui.shadcn.com/docs/theming#base-colors](https://ui.shadcn.com/docs/theming#base-colors)
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*OsCBZNIBtic-R_kigYWNmg.png)
+  
+  - Wait until the installation process is complete. Once finished, you will see a new file named `components.json` and a new folder named `lib` containing a file called `utils.ts`.
+  
+  ![](https://miro.medium.com/v2/resize:fit:276/1*ipEb6IZbotwVx4NHbW-DKw.png)
+  
+  > `components.json` is a configuration file used by the shadcn/ui CLI. This file is not part of Next.js, it is metadata used by the shadcn CLI for managing component locations, and configuring import aliases.
+  >
+  > `utils.ts` is a file that determines whether the project uses TypeScript, RSC (React Server Components), or the App Router.
+  
+  - To use components from shadcn/ui, you can refer to the documentation available at: [**_https://ui.shadcn.com/docs/components_**](https://ui.shadcn.com/docs/components). Shadcn/ui provides many ready‑to‑use UI components that can be customized according to your needs.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*9UFq9e88pIRxlqWjFwLs5g.png)
+  
+  - For example, if we want to create a **button** component, we simply need to add that component to our project by typing the following command in the terminal:
+  
+  ```
+  npx shadcn@latest add button
+  ```
+  
+  > Note: You can leave the first terminal open to run the project (`npm run dev`), then open another terminal by clicking the ‘split terminal’ icon in the VS Code terminal. This allows you to use the second terminal for installing libraries or packages.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*CGPsAQEREP8JaFsbZ2UDxA.png)
+  
+  - After adding the component, the generated component file will be saved in the `components/ui` folder ( **_button.tsx_**).
+  
+  ![](https://miro.medium.com/v2/resize:fit:280/1*mxjEr2r1dGisjfd29nFSvA.png)
+  
+  - Once the button component has been added, we can start using it in our web app pages.
+  - For example, open the `app/page.tsx` file and edit that file so that it can display the button component. Import the button component, and it will be ready to use within that file.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*KWr6dhLjzY4PwnSPzwNmOg.png)
+  
+  - Then save the file ( **Ctrl + S**), and reopen the browser to see the result.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*mP_VeLRgSMoZhSVruvQ4RA.png)
+  
+  - If you want to customize shadcn/ui components, you can refer to the documentation on the shadcn/ui website. For example, for the button component, you can check the following link: [https://ui.shadcn.com/docs/components/radix/button](https://ui.shadcn.com/docs/components/radix/button)
+  - FYI, since Next.js and shadcn/ui already support **Tailwind CSS**, you can also use Tailwind CSS classes for styling the components.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*4o4MEddVWxAF22i_rXOsVQ.png)
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*U8rvBEQ0Ksh5q5y7NgqasA.png)
+  
+  Congratulations! You have successfully set up Next.js and shadcn/ui to create UI components for your web application. Next, we will begin building our login page.
+  
+  ## Setup and Integration of Firebase Authentication Into the Web App Project
+  
+  **Firebase Authentication** is an authentication service from Firebase that provides secure login mechanisms and user identity management for both web and mobile applications. This service can be used for free (for several features).
+  
+  ## Get Juwono (ジュウｵノ)’s stories in your inbox
+  
+  Join Medium for free to get updates from this writer.
+  
+  Subscribe
+  
+  Subscribe
+  
+  Remember me for faster sign in
+  
+  First, open the Firebase Console page using the following link: [**https://console.firebase.google.com/**](https://console.firebase.google.com/u/0/). ( _Don’t forget to log in using your own Gmail account_). Below is the initial home page of the Firebase Console.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*ovyYuVb7joCBsM0gsbuXlA.png)
+  
+  - Create a new project in the Firebase Console by clicking _‘_ **_Create a new Firebase project_** _’_.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*7e4-f41SDnVg5daqrgOPSg.png)
+  
+  - Then, give the project a name (for example: `firebase-auth-juwono`), and click the **Continue** button.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*T6Td3d97lPgqSnXBvZUSrA.png)
+  
+  - Disable **Gemini in Firebase**, because we will not be using it for now → click **Continue**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*PhdpekPYc_Qnprvkv5yfFA.png)
+  
+  - Disable **Google Analytics for this project**, because we will not be using it for now → click **Create project**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*G_KUVic_EbQ_NGK9A0OdgA.png)
+  
+  - Wait until the project creation process is complete, then click **Continue** to enter the project dashboard.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*TGcEdYZ-MEJKRLwMXb5bcg.png)
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*DPkZ_iPm2VU1BW1iLALm0g.png)
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*NTuV_icUJE6AS7WEbiiVKA.png)
+  
+  - Next, we will set up the authentication mechanism. In the project sidebar, select **Build → Authentication**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*sf67xf1fbGC7PIJ9lsnuNQ.png)
+  
+  - Click **Get started** to begin creating the authentication mechanism.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*5CJs9koPIQBoqqzyZeccZg.png)
+  
+  - In the **Sign-in method** tab, we will configure the authentication methods for our web application. For now, we will enable two login methods:
+  
+  1. Login using Google (Gmail).
+  2. Login using Email and Password.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*S_aHIczu-3aKsLTx_C2tHg.png)
+  
+  - First, click the Google sign‑in method.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*UA7IWXS0TxuT6dZd91e_iw.png)
+  
+  - Click the **Enable** button to activate the Google authentication method. Then, you can either set a **Public‑facing name** or keep the default one, and for **Support email for project**, select your email → click **Save**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*PhTWmUwkqoHSF8h05X2K1Q.png)
+  
+  - The Google sign‑in method is now successfully enabled. Next, we will set up login using Email and Password.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*yGeH9P5bSO6vJoix49Ymcg.png)
+  
+  - Click the **Add new provider** button, then select **Email/Password**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*XNMNRSycL-OO_mtFqiQsCA.png)
+  
+  - Enable the **Email/Password** option → click **Save**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*Bys8Co0vAoMl6j4qmlndfQ.png)
+  
+  - Now you have two active sign‑in methods. Next, we will integrate these authentication methods into our application.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*1bjSJI0MrgFJ9HDrHY635Q.png)
+  
+  - Next, still in the Firebase Console, go to **Project Overview**, then click the **\+ Add app** button to create a new app → select the **Web** icon.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*gpyIE33Hd69rkvDiofZhdg.png)
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*3jdX3NkG_55kc3wfJgziow.png)
+  
+  - Give your app a nickname (for example: `login-auth-juwono`). You do not need to check the _‘Also set up Firebase Hosting for this app’_ option → click **Register app**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*ZJ0Pfzy3VFbWYwje2BP7Fg.png)
+  
+  - After clicking **Register app** button, in the **Add Firebase SDK** section you will see some configuration information needed to integrate Firebase into our web application.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*A7x2evwWR0Q2LYwRFeI-dw.png)
+  
+  > **Note:** The code shown in the Firebase SDK section is confidential, so we will later store it in a `.env.local` file to keep it hidden.
+  
+  - Go back to VS Code → open the terminal. Type the following command to install Firebase:
+  
+  ```
+  npm install firebase
+  ```
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*bDlh_FwWLNeeGPvWNH4Fmw.png)
+  
+  - Go back to VS Code. Inside the `lib` folder, create a new file named `firebase.ts`. This file will contain the code used to integrate Firebase with our application.
+  - Copy and paste all the code from the Firebase SDK section in the Firebase Console into this file.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*zaecf5YvxvoYBX-oOn-DiQ.png)
+  
+  - Then, import the `getAuth` function from `firebase/auth` so we can implement the authentication features provided by Firebase Authentication. After that, the `firebase.ts` file will look like this:
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*KIyDSxOU8ET-f2CuPWsRHA.png)
+  
+  - Now we will store the secret values inside the `firebase.ts` file into a `.env.local` file. This file is used to store secrets such as API keys, App IDs, and other sensitive configuration values so they are not exposed to the public but are still readable by the application.
+  - Create a new file in the root folder of the application (`nextjs-firebase`) named `.env.local`, then move all secret variable values from the `firebase.ts` file into it.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*O4WHxdscGCUmHfxIrzqFiQ.png)
+  
+  > Because these variables will later be sent directly to client‑side components, any secret variables that will be used in client‑side code (e.g., React components) must use the `NEXT_PUBLIC_`prefix. Variables without this prefix will not be bundled to the browser. Next.js only exposes variables that start with `NEXT_PUBLIC_`to the client.
+  
+  - Then, in the `firebase.ts` file, reference the variables using the `process.env` method.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*e2oPDxREPBPLY_d8qmHuGA.png)
+  
+  - Next, since we will create a simple endpoint for the login authentication process, we need to create a file named `firebase-admin.ts`. This file functions like middleware for Firebase Authentication in our web app.
+  - Install the package named firebase-admin in vs code terminal:
+  
+  ```
+  npm install firebase-admin
+  ```
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*5FMMY9Kq9EA1xz0jpSJh3A.png)
+  
+  - Then, create a `firebase-admin.ts` file inside the `lib` folder, then fill it with the following code:
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*Qy5f297Td6lKe1bHZARPhw.png)
+  
+  As shown in the `firebase-admin.ts` file, there are several secret variables — `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` — which we need in order to integrate our application with the Firebase App Console. These variables must be obtained from a JSON file that comes from the Firebase project app.
+  
+  - Go back to the Firebase Console (close the ‘Add Firebase to your web app’ window), then navigate to **Project Overview → Service accounts**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*qR3PTbqOZ-h1WHyKyevJzg.png)
+  
+  - Click the **Generate new private key** button → then click **Generate key** to generate a private key. A JSON file will be downloaded. Keep this file secure and make sure it stays confidential.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*FYUutVM_XTBKiQExFf7bIw.png)
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*ZhsOpCbq4nxJ7dASd1VVXQ.png)
+  
+  ![](https://miro.medium.com/v2/resize:fit:515/1*ino7IgwvUnw-WSrauGRXKQ.png)
+  
+  - Locate the downloaded JSON file (usually inside your computer’s _Downloads_ folder), then open it in VS Code by dragging and dropping it into the editor.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*DKXxstiuJIJDfeFzNoalvQ.png)
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*1dapKJ2iTHBEd68fEILuyQ.png)
+  
+  - Open the `.env.local` file again, then add the following lines of code:
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*5ldpX3nU47al-swWzrk28w.png)
+  
+  - Copy the values of `project_id`, `client_email`, and `private_key` from the JSON file into the corresponding environment variables.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*f1m0K6VZ9nBYTKxFHsAocA.png)
+  
+  - Great! Your Next.js web application is now integrated with the Firebase Console and Firebase Authentication. Next, we will create the login page and implement the authentication mechanism into that page.
+  
+  ## Creating a Login Feature in The Web App Using Firebase Authentication
+  
+  - First, install the `sonner` component from shadcn/ui for alert notifications or success/error messages:
+  
+  ```
+  npx shadcn@latest add sonner
+  ```
+  
+  - Then, add the `sonner` component to the `app/layout.tsx` file.
+  
+  ```
+  import type { Metadata } from "next";
+  import { Geist, Geist_Mono } from "next/font/google";
+  import { Toaster } from "@/components/ui/sonner";
+  import "./globals.css";
+  
+  const geistSans = Geist({
+    variable: "--font-geist-sans",
+    subsets: ["latin"],
+  });
+  
+  const geistMono = Geist_Mono({
+    variable: "--font-geist-mono",
+    subsets: ["latin"],
+  });
+  
+  export const metadata: Metadata = {
+    title: "My App",
+    description: "Firebase Authentication App",
+  };
+  
+  export default function RootLayout({ children }: { children: React.ReactNode }) {
+    return (
+      <html lang="en" suppressHydrationWarning>
+        <body
+          className={`
+            ${geistSans.variable}
+            ${geistMono.variable}
+            antialiased
+            bg-background
+            text-foreground
+          `}
+        >
+          {children}
+  
+          {/* Sonner Toaster */}
+          <Toaster position="top-right" richColors closeButton duration={3000} />
+        </body>
+      </html>
+    );
+  }
+  ```
+  
+  - Before we create the login and dashboard pages, first we need to prepare a helper‑like function to verify the session cookie. This function can also be used to protect routes for pages accessed by users. Create a file named `auth.ts` inside the `lib` folder.
+  - Here is the content of`lib/auth.ts` **:**
+  
+  ```
+  import { cookies } from "next/headers";
+  import { adminAuth } from "@/lib/firebase-admin";
+  import type { DecodedIdToken } from "firebase-admin/auth";
+  
+  export async function getSession(): Promise<DecodedIdToken | null> {
+    const cookieStore = await cookies();
+    const session = cookieStore.get("session")?.value;
+  
+    if (!session) return null;
+  
+    try {
+      const decodedToken = await adminAuth.verifyIdToken(session, true);
+      return decodedToken;
+    } catch {
+      return null;
+    }
+  }
+  ```
+  
+  - Then, we’ll create endpoints to handle the session cookie and the logout process. Create a folder named `api`, then inside the `api` folder create two folders: `logout` and `session`.
+  - In the `logout` folder, create a file named `route.ts`:
+  
+  ```
+  import { NextResponse } from "next/server";
+  
+  export async function POST() {
+    const response = NextResponse.json({ message: "Logged out" });
+  
+    response.cookies.set("session", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      expires: new Date(0),
+      path: "/",
+    });
+  
+    return response;
+  }
+  ```
+  
+  - In the `session` folder, create a file named `route.ts`:
+  
+  ```
+  import { adminAuth } from "@/lib/firebase-admin";
+  import { NextRequest, NextResponse } from "next/server";
+  
+  export async function POST(req: NextRequest) {
+    const authorization = req.headers.get("Authorization");
+  
+    if (!authorization?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  
+    const idToken = authorization.split("Bearer ")[1];
+  
+    await adminAuth.verifyIdToken(idToken, true);
+  
+    const response = NextResponse.json({ status: "success" });
+  
+    response.cookies.set("session", idToken, {
+      httpOnly: true,
+      secure: true,
+      path: "/",
+    });
+  
+    return response;
+  }
+  ```
+  
+  - Next, create a folder named `login` inside the `app` folder.
+  - Install some components from shadcn/ui:
+  
+  ```
+  npx shadcn@latest add input card separator alert-dialog
+  ```
+  
+  - Inside the `login` folder, create a file named `page.tsx`. This file is a component. When a user opens `http://localhost:3000/login`, they will automatically be routed to this component file. Every component that is rendered on the client side must start with the `"use client"` directive in its code.
+  - Here is the content of`app/login/page.tsx` **:**
+  
+  ```
+  "use client";
+  
+  import { useState } from "react";
+  import { auth } from "@/lib/firebase";
+  import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword } from "firebase/auth";
+  import { useRouter } from "next/navigation";
+  import { Button } from "@/components/ui/button";
+  import { Input } from "@/components/ui/input";
+  import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+  import { Separator } from "@/components/ui/separator";
+  import { toast } from "sonner";
+  
+  export default function LoginPage() {
+    const router = useRouter();
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [loading, setLoading] = useState(false);
+  
+    const createSession = async (idToken: string) => {
+      const res = await fetch("/api/session", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+  
+      if (!res.ok) {
+        throw new Error("Failed to create session");
+      }
+    };
+  
+    const handleGoogleLogin = async () => {
+      try {
+        setLoading(true);
+  
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+        const idToken = await result.user.getIdToken();
+  
+        await createSession(idToken);
+  
+        toast.success("Login success 🎉");
+  
+        router.push("/dashboard");
+        router.refresh();
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error.message || "Login failed");
+      } finally {
+        setLoading(false);
+      }
+    };
+  
+    const handleEmailLogin = async () => {
+      try {
+        setLoading(true);
+  
+        const result = await signInWithEmailAndPassword(auth, email, password);
+  
+        const idToken = await result.user.getIdToken();
+        await createSession(idToken);
+  
+        toast.success("Login success 🎉");
+  
+        router.push("/dashboard");
+        router.refresh();
+      } catch (error: any) {
+        console.error(error);
+  
+        let message = "Login failed";
+  
+        if (error.code === "auth/user-not-found") {
+          message = "User not found";
+        } else if (error.code === "auth/wrong-password") {
+          message = "wrong password";
+        } else if (error.code === "auth/invalid-email") {
+          message = "invalid email format";
+        }
+  
+        toast.error(message);
+      } finally {
+        setLoading(false);
+      }
+    };
+  
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-center text-2xl">Sign in to Your Account</CardTitle>
+          </CardHeader>
+  
+          <CardContent className="space-y-4">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+            >
+              {loading ? "Processing..." : "Continue with Google"}
+            </Button>
+  
+            <div className="flex items-center gap-2">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">OR</span>
+              <Separator className="flex-1" />
+            </div>
+  
+            <Input
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+  
+            <Input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+  
+            <Button className="w-full" onClick={handleEmailLogin} disabled={loading}>
+              {loading ? "Signing in..." : "Login with Email"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  ```
+  
+  - Next, we will create a kind of **protected route** so that users who are already logged in are redirected to the dashboard page (`/dashboard`) and cannot return to the login page. Create a new file named `layout.tsx` inside **login** folder. Here is the content of `app/login/layout.tsx`:
+  
+  ```
+  import { redirect } from "next/navigation";
+  import { getSession } from "@/lib/auth";
+  
+  export default async function LoginLayout({
+    children,
+  }: {
+    children: React.ReactNode;
+  }) {
+    const session = await getSession();
+    if (session) redirect("/dashboard");
+  
+    return <>{children}</>;
+  }
+  ```
+  
+  - See the result in the browser by typing [http://localhost:3000/login](http://localhost:3000/login) to accessing the login page:
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*WLyHixwuh_P2glRhFLSQQA.png)
+  
+  - Then, create a `dashboard` folder inside the `app` folder.
+  - Inside the `dashboard` folder, create a `page.tsx` file. Here is the content of `app/dashboard/page.tsx`:
+  
+  ```
+  import { cookies } from "next/headers";
+  import { redirect } from "next/navigation";
+  import { adminAuth } from "@/lib/firebase-admin";
+  import LogoutButton from "@/components/logout-button";
+  import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+  
+  export default async function DashboardPage() {
+    const cookieStore = await cookies();
+    const session = cookieStore.get("session")?.value;
+  
+    if (!session) redirect("/login");
+  
+    let decodedToken;
+  
+    try {
+      decodedToken = await adminAuth.verifyIdToken(session, true);
+    } catch {
+      redirect("/login");
+    }
+  
+    return (
+      <div className="min-h-screen bg-muted/40">
+        {/* Header */}
+        <header className="border-b bg-white">
+          <div className="container mx-auto flex items-center justify-between py-4 px-4">
+            <h1 className="text-xl font-semibold">Dashboard</h1>
+            <LogoutButton />
+          </div>
+        </header>
+  
+        {/* Main Content */}
+        <main className="container mx-auto py-10 px-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>User Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>
+                  <strong>Email:</strong> {decodedToken.email}
+                </p>
+                <p>
+                  <strong>UID:</strong> {decodedToken.uid}
+                </p>
+                <p>
+                  <strong>Email Verified:</strong> {decodedToken.email_verified ? "Yes" : "No"}
+                </p>
+              </CardContent>
+            </Card>
+  
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>Welcome</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">Successfully login using firebase auth</p>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+      </div>
+    );
+  }
+  ```
+  
+  - Also create a logout button on the dashboard page. In the `components` folder, create a new file named `logout-button.tsx`. Here is the content of `components/logout-button.tsx` **:**
+  
+  ```
+  "use client";
+  
+  import { useState } from "react";
+  import { useRouter } from "next/navigation";
+  import { Button } from "@/components/ui/button";
+  import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+  } from "@/components/ui/alert-dialog";
+  import { toast } from "sonner";
+  
+  export default function LogoutButton() {
+    const router = useRouter();
+    const [loading, setLoading] = useState(false);
+  
+    const handleLogout = async () => {
+      try {
+        setLoading(true);
+  
+        const res = await fetch("/api/logout", {
+          method: "POST",
+        });
+  
+        if (!res.ok) throw new Error("Failed to logout");
+  
+        toast.success("Successfully logged out");
+  
+        router.push("/login");
+        router.refresh();
+      } catch (error: any) {
+        toast.error(error.message || "Something went wrong");
+      } finally {
+        setLoading(false);
+      }
+    };
+  
+    return (
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="destructive">Logout</Button>
+        </AlertDialogTrigger>
+  
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Logout Confirmation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to logout?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+  
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout} disabled={loading}>
+              {loading ? "Logging out..." : "Yes, Logout"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
+  }
+  ```
+  
+  Okay, now let’s test by logging in using two methods:
+  
+  ### Login with Google account
+  
+  - Click the **‘Continue with Google’** button on the login page.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*kW6Rnq2bXfLw0k9dNADN0g.png)
+  
+  - Choose the Google account you want to use for login.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*Kk0-3dP8SLb0jrHCph1xJg.png)
+  
+  - Wait a moment. If successful, the user will be redirected to the dashboard page ( **http://localhost:3000/dashboard**). This means the login was successful.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*OQH5xYzzKj45ZTKnAu89uQ.png)
+  
+  ### Login with email and password
+  
+  - Go back to the Firebase Console, then select **Authentication**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*qirwVj5v2woEWAaa2h42wQ.png)
+  
+  - In the **Users** tab, add a new user by clicking the **‘Add user’** button.
+  - Enter the new user’s email and password to register → then click **Add user**.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*ZY8RVSNjQYblDAuS69f7IQ.png)
+  
+  - Once the user is successfully added, they will appear in the list under the **Users** tab.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*HsIkFO6gRKHNFeCEJKAYUg.png)
+  
+  - Next, return to the login page ( **http://localhost:3000/login**) and enter the email and password you registered through the Firebase Console.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*je9V27TXpGVVV7hXVv5_Iw.png)
+  
+  - If login is successful, you will be redirected to the dashboard page immediately.
+  
+  Press enter or click to view image in full size
+  
+  ![](https://miro.medium.com/v2/resize:fit:700/1*2GRHJQWsoof7yIjCWyqclA.png)
+  
+  Congratulations, you have successfully created a login page and implemented authentication using Firebase Authentication and Next.js.
+  
+  Below is the final folder structure of our application after implementing the login feature.
+  
+  ![](https://miro.medium.com/v2/resize:fit:220/1*PehGp6rPQlaLzeMnxcnU8Q.png)
+  
+  **_References:_**
+  
+  [**Index \| Node.js v25.6.1 Documentation** \\
+  \\
+  **Edit description**\\
+  \\
+  nodejs.org](https://nodejs.org/docs/latest/api/?source=post_page-----fe280331900a---------------------------------------)
+  
+  [**Next.js Docs \| Next.js** \\
+  \\
+  **Welcome to the Next.js Documentation.**\\
+  \\
+  nextjs.org](https://nextjs.org/docs?source=post_page-----fe280331900a---------------------------------------)
+  
+  [**Non-opinionated vs. Opinionated Design \| Baeldung on Computer Science** \\
+  \\
+  **Explore the concepts of non-opinionated and opinionated software design.**\\
+  \\
+  www.baeldung.com](https://www.baeldung.com/cs/opinionated-software-design?source=post_page-----fe280331900a---------------------------------------)
+  
+  [**Quick Start - React** \\
+  \\
+  **The library for web and native user interfaces**\\
+  \\
+  react.dev](https://react.dev/learn?source=post_page-----fe280331900a---------------------------------------)
+  
+  [**Introduction** \\
+  \\
+  **shadcn/ui is a set of beautifully-designed, accessible components and a code distribution platform. Works with your…**\\
+  \\
+  ui.shadcn.com](https://ui.shadcn.com/docs?source=post_page-----fe280331900a---------------------------------------)
+  
+  [**Firebase Authentication** \\
+  \\
+  **Firebase Authentication lets you add an end-to-end identity solution to your app for easy user authentication, sign-in…**\\
+  \\
+  firebase.google.com](https://firebase.google.com/docs/auth?source=post_page-----fe280331900a---------------------------------------)
+  
+  [Nextjs](https://medium.com/tag/nextjs?source=post_page-----fe280331900a---------------------------------------)
+  
+  [Firebase](https://medium.com/tag/firebase?source=post_page-----fe280331900a---------------------------------------)
+  
+  [![Juwono (ジュウｵノ)](https://miro.medium.com/v2/resize:fill:48:48/1*ImqPS5I1arB3t2NmkEA5Pg.jpeg)](https://medium.com/@unosega?source=post_page---post_author_info--fe280331900a---------------------------------------)
+  
+  [![Juwono (ジュウｵノ)](https://miro.medium.com/v2/resize:fill:64:64/1*ImqPS5I1arB3t2NmkEA5Pg.jpeg)](https://medium.com/@unosega?source=post_page---post_author_info--fe280331900a---------------------------------------)
+  
+  Follow
+  
+  [**Written by Juwono (ジュウｵノ)**](https://medium.com/@unosega?source=post_page---post_author_info--fe280331900a---------------------------------------)
+  
+  [34 followers](https://medium.com/@unosega/followers?source=post_page---post_author_info--fe280331900a---------------------------------------)
+  
+  · [6 following](https://medium.com/@unosega/following?source=post_page---post_author_info--fe280331900a---------------------------------------)
+  
+  Machine Learning Student \| Full Stack Web Developer \| ICT Teacher \| Japanese Teacher
+  
+  Follow
+  
+  ## Responses (1)
+  
+  ![](https://miro.medium.com/v2/resize:fill:32:32/1*dmbNkD5D-u45r44go_cf0g.png)
+  
+  Write a response
+  
+  [What are your thoughts?](https://medium.com/m/signin?operation=register&redirect=https%3A%2F%2Fmedium.com%2F%40unosega%2Fcreating-a-login-feature-using-next-js-v16-and-firebase-authentication-fe280331900a&source=---post_responses--fe280331900a---------------------respond_sidebar------------------)
+  
+  Cancel
+  
+  Respond
+  
+  [![Phenorenon](https://miro.medium.com/v2/resize:fill:32:32/0*orp85n7uDcsg8VW2)](https://medium.com/@phenorenon?source=post_page---post_responses--fe280331900a----0-----------------------------------)
+  
+  [Phenorenon](https://medium.com/@phenorenon?source=post_page---post_responses--fe280331900a----0-----------------------------------)
+  
+  [Feb 19](https://medium.com/@phenorenon/amazing-beautiful-papa-mau-tiga-bb2b81c7dbca?source=post_page---post_responses--fe280331900a----0-----------------------------------)
+  
+  ```
+  Amazing! Beautiful! Papa mau tiga
+  ```
+  
+  Reply
+  
+  ## More from Juwono (ジュウｵノ)
+  
+  ![Basic HTML & CSS: Responsive Design (Media Queries and Mobile-first Layout)](https://miro.medium.com/v2/resize:fit:679/format:webp/1*0rVanr87Z5m8bcKmzJIRNQ.png)
+  
+  [![Juwono (ジュウｵノ)](https://miro.medium.com/v2/resize:fill:20:20/1*ImqPS5I1arB3t2NmkEA5Pg.jpeg)](https://medium.com/@unosega?source=post_page---author_recirc--fe280331900a----0---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  [Juwono (ジュウｵノ)](https://medium.com/@unosega?source=post_page---author_recirc--fe280331900a----0---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  [**Basic HTML & CSS: Responsive Design (Media Queries and Mobile-first Layout)**\\
+  \\
+  **After learning about the basics of CSS in parts 1 and 2, in this article we will explore a concept called Responsive Design. This concept…**](https://medium.com/@unosega/basic-html-css-responsive-design-media-queries-and-mobile-first-layout-e7d902c63b61?source=post_page---author_recirc--fe280331900a----0---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  Oct 15, 2025
+  
+  [A clap icon5](https://medium.com/@unosega/basic-html-css-responsive-design-media-queries-and-mobile-first-layout-e7d902c63b61?source=post_page---author_recirc--fe280331900a----0---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  ![Implementing Centralized Monitoring and Alerting for Multiple Servers using Prometheus + Grafana](https://miro.medium.com/v2/resize:fit:679/format:webp/1*_ywkvUJtFcZaF5mvcYls_Q.jpeg)
+  
+  [![Juwono (ジュウｵノ)](https://miro.medium.com/v2/resize:fill:20:20/1*ImqPS5I1arB3t2NmkEA5Pg.jpeg)](https://medium.com/@unosega?source=post_page---author_recirc--fe280331900a----1---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  [Juwono (ジュウｵノ)](https://medium.com/@unosega?source=post_page---author_recirc--fe280331900a----1---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  [**Implementing Centralized Monitoring and Alerting for Multiple Servers using Prometheus + Grafana**\\
+  \\
+  **In today’s dynamic IT environments, managing multiple servers efficiently is critical for ensuring system reliability and performance…**](https://medium.com/@unosega/implementing-centralized-monitoring-for-multiple-servers-using-prometheus-grafana-21bf5a2343ea?source=post_page---author_recirc--fe280331900a----1---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  Nov 4, 2025
+  
+  [A clap icon3](https://medium.com/@unosega/implementing-centralized-monitoring-for-multiple-servers-using-prometheus-grafana-21bf5a2343ea?source=post_page---author_recirc--fe280331900a----1---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  ![HTML Basic 01 — Structure, Tags, Images, Links, Lists](https://miro.medium.com/v2/resize:fit:679/format:webp/1*u3EJCTkiD6KJEmxmR7ZdYA.png)
+  
+  [![Juwono (ジュウｵノ)](https://miro.medium.com/v2/resize:fill:20:20/1*ImqPS5I1arB3t2NmkEA5Pg.jpeg)](https://medium.com/@unosega?source=post_page---author_recirc--fe280331900a----2---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  [Juwono (ジュウｵノ)](https://medium.com/@unosega?source=post_page---author_recirc--fe280331900a----2---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  [**HTML Basic 01 — Structure, Tags, Images, Links, Lists**\\
+  \\
+  **In this article, we will learn the basics of HTML (HyperText Markup Language), a fundamental foundation of websites that serves as the…**](https://medium.com/@unosega/html-basic-01-structure-tags-images-links-lists-79813d7fff5d?source=post_page---author_recirc--fe280331900a----2---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  Sep 17, 2025
+  
+  [A clap icon9\\
+  \\
+  A response icon1](https://medium.com/@unosega/html-basic-01-structure-tags-images-links-lists-79813d7fff5d?source=post_page---author_recirc--fe280331900a----2---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  ![Manual API Testing The Nextjs App Using Postman (Part 02)](https://miro.medium.com/v2/resize:fit:679/format:webp/1*S-iIIRGMty98ny0IZ0fixg.png)
+  
+  [![Juwono (ジュウｵノ)](https://miro.medium.com/v2/resize:fill:20:20/1*ImqPS5I1arB3t2NmkEA5Pg.jpeg)](https://medium.com/@unosega?source=post_page---author_recirc--fe280331900a----3---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  [Juwono (ジュウｵノ)](https://medium.com/@unosega?source=post_page---author_recirc--fe280331900a----3---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  [**Manual API Testing The Nextjs App Using Postman (Part 02)**\\
+  \\
+  **After successfully building a full‑stack to‑do list application in the previous article (Click here), now it’s time to perform API endpoint…**](https://medium.com/@unosega/manual-api-testing-the-nextjs-app-using-postman-368b4fa9e902?source=post_page---author_recirc--fe280331900a----3---------------------579e3b7d_12cb_439a_8150_c2d25a6de85c--------------)
+  
+  Mar 4
+  
+  [See all from Juwono (ジュウｵノ)](https://medium.com/@unosega?source=post_page---author_recirc--fe280331900a---------------------------------------)
+  
+  ## Recommended from Medium
+  
+  ![Claude Skills for Product Designers](https://miro.medium.com/v2/resize:fit:679/format:webp/1*gXGL1GPeYM875Sbw53XuRw.png)
+  
+  [![UX Planet](https://miro.medium.com/v2/resize:fill:20:20/1*A0FnBy5FBoVQC02SZXLXPg.png)](https://medium.com/ux-planet?source=post_page---read_next_recirc--fe280331900a----0---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  In
+  
+  [UX Planet](https://medium.com/ux-planet?source=post_page---read_next_recirc--fe280331900a----0---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  by
+  
+  [Nick Babich](https://medium.com/@101?source=post_page---read_next_recirc--fe280331900a----0---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [**Claude Skills for Product Designers**\\
+  \\
+  **How to create your first Claude Skill**](https://medium.com/ux-planet/claude-skills-for-product-designers-a453a7a8faa7?source=post_page---read_next_recirc--fe280331900a----0---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  Feb 9
+  
+  [A clap icon1K\\
+  \\
+  A response icon25](https://medium.com/ux-planet/claude-skills-for-product-designers-a453a7a8faa7?source=post_page---read_next_recirc--fe280331900a----0---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  ![Stop making colour palettes](https://miro.medium.com/v2/resize:fit:679/format:webp/1*Ql8GerqnhAcvYlr_76a4rQ.png)
+  
+  [![Amy Rogers](https://miro.medium.com/v2/resize:fill:20:20/1*lAYmLh_7wy-k8wa_zGDcIA.jpeg)](https://medium.com/@amymrogers?source=post_page---read_next_recirc--fe280331900a----1---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [Amy Rogers](https://medium.com/@amymrogers?source=post_page---read_next_recirc--fe280331900a----1---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [**Stop making colour palettes**\\
+  \\
+  **How to build a dynamic, accessible system with OKLCH**](https://medium.com/@amymrogers/stop-making-colour-palettes-644bbd3256c3?source=post_page---read_next_recirc--fe280331900a----1---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  Jan 17
+  
+  [A clap icon284\\
+  \\
+  A response icon3](https://medium.com/@amymrogers/stop-making-colour-palettes-644bbd3256c3?source=post_page---read_next_recirc--fe280331900a----1---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  ![Claude Code Ultraplan Launched: I Just Tested It (And It’s Better Than It Looks)](https://miro.medium.com/v2/resize:fit:679/format:webp/1*W5hbs5lyrNhL9Jzij7k4xg.png)
+  
+  [![Joe Njenga](https://miro.medium.com/v2/resize:fill:20:20/1*0Hoc7r7_ybnOvk1t8yR3_A.jpeg)](https://medium.com/@joe.njenga?source=post_page---read_next_recirc--fe280331900a----0---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [Joe Njenga](https://medium.com/@joe.njenga?source=post_page---read_next_recirc--fe280331900a----0---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [**Claude Code Ultraplan Launched: I Just Tested It (And It’s Better Than It Looks)**\\
+  \\
+  **Anthropic has added Claude Code ultraplan, and I was quick to test it. You might like it or hate it for one reason — I’ll talk about that…**](https://medium.com/@joe.njenga/claude-code-ultraplan-launched-i-just-tested-it-and-its-better-than-it-looks-21a628332e97?source=post_page---read_next_recirc--fe280331900a----0---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  5d ago
+  
+  [A clap icon530\\
+  \\
+  A response icon20](https://medium.com/@joe.njenga/claude-code-ultraplan-launched-i-just-tested-it-and-its-better-than-it-looks-21a628332e97?source=post_page---read_next_recirc--fe280331900a----0---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  ![The Best Mobile Layout for Complex Data Tables](https://miro.medium.com/v2/resize:fit:679/format:webp/0*cRXaQIHScIAjU3tk.png)
+  
+  [![UX Movement](https://miro.medium.com/v2/resize:fill:20:20/1*0hVXTjSwlD8Kje1OlclpDg.png)](https://medium.com/@uxmovement?source=post_page---read_next_recirc--fe280331900a----1---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [UX Movement](https://medium.com/@uxmovement?source=post_page---read_next_recirc--fe280331900a----1---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [**The Best Mobile Layout for Complex Data Tables**\\
+  \\
+  **Fit any size table on a mobile screen**](https://medium.com/@uxmovement/the-best-mobile-layout-for-complex-data-tables-e3ced21ce425?source=post_page---read_next_recirc--fe280331900a----1---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  Mar 24
+  
+  [A clap icon611\\
+  \\
+  A response icon14](https://medium.com/@uxmovement/the-best-mobile-layout-for-complex-data-tables-e3ced21ce425?source=post_page---read_next_recirc--fe280331900a----1---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  ![Vibe Coding is Over illustration of three ai generated landing pages with the words IT’S OVER written at the top in large text](https://miro.medium.com/v2/resize:fit:679/format:webp/1*1OGKfKCooEZbKCSoSXXY8g.png)
+  
+  [![Michal Malewicz](https://miro.medium.com/v2/resize:fill:20:20/1*149zXrb2FXvS_mctL4NKSg.png)](https://medium.com/@michalmalewicz?source=post_page---read_next_recirc--fe280331900a----2---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [Michal Malewicz](https://medium.com/@michalmalewicz?source=post_page---read_next_recirc--fe280331900a----2---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [**Vibe Coding is OVER.**\\
+  \\
+  **Here’s What Comes Next.**](https://medium.com/@michalmalewicz/vibe-coding-is-over-5a84da799e0d?source=post_page---read_next_recirc--fe280331900a----2---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  Mar 24
+  
+  [A clap icon4.7K\\
+  \\
+  A response icon172](https://medium.com/@michalmalewicz/vibe-coding-is-over-5a84da799e0d?source=post_page---read_next_recirc--fe280331900a----2---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  ![A Designer’s Guide to Claude Code](https://miro.medium.com/v2/resize:fit:679/format:webp/1*Z_6rX6AWI7nwz97z_HrRGw.png)
+  
+  [![Bootcamp](https://miro.medium.com/v2/resize:fill:20:20/1*_wDJs77bAPiwuAe9qOK5Zg.png)](https://medium.com/design-bootcamp?source=post_page---read_next_recirc--fe280331900a----3---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  In
+  
+  [Bootcamp](https://medium.com/design-bootcamp?source=post_page---read_next_recirc--fe280331900a----3---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  by
+  
+  [Katherine Yeh](https://medium.com/@kkyeh?source=post_page---read_next_recirc--fe280331900a----3---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [**A Designer’s Guide to Claude Code**\\
+  \\
+  **How I organized Skills, Tools, and Environments into a scalable AI Design Workflow.**](https://medium.com/design-bootcamp/a-designers-guide-to-organizing-ai-skills-and-tools-in-claude-code-f87477c35b82?source=post_page---read_next_recirc--fe280331900a----3---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  Mar 26
+  
+  [A clap icon784\\
+  \\
+  A response icon21](https://medium.com/design-bootcamp/a-designers-guide-to-organizing-ai-skills-and-tools-in-claude-code-f87477c35b82?source=post_page---read_next_recirc--fe280331900a----3---------------------207edcd7_f7af_4546_b257_dbac4a23dad6--------------)
+  
+  [See more recommendations](https://medium.com/?source=post_page---read_next_recirc--fe280331900a---------------------------------------)
+  
+  [Help](https://help.medium.com/hc/en-us?source=post_page-----fe280331900a---------------------------------------)
+  
+  [Status](https://status.medium.com/?source=post_page-----fe280331900a---------------------------------------)
+  
+  [About](https://medium.com/about?autoplay=1&source=post_page-----fe280331900a---------------------------------------)
+  
+  [Careers](https://medium.com/jobs-at-medium/work-at-medium-959d1a85284e?source=post_page-----fe280331900a---------------------------------------)
+  
+  [Press](mailto:pressinquiries@medium.com)
+  
+  [Blog](https://blog.medium.com/?source=post_page-----fe280331900a---------------------------------------)
+  
+  [Privacy](https://policy.medium.com/medium-privacy-policy-f03bf92035c9?source=post_page-----fe280331900a---------------------------------------)
+  
+  [Rules](https://policy.medium.com/medium-rules-30e5502c4eb4?source=post_page-----fe280331900a---------------------------------------)
+  
+  [Terms](https://policy.medium.com/medium-terms-of-service-9db0094a1e0f?source=post_page-----fe280331900a---------------------------------------)
+  
+  [Text to speech](https://speechify.com/medium?source=post_page-----fe280331900a---------------------------------------)
+  
+  reCAPTCHA
+  
+  Recaptcha requires verification.
+  
+  protected by **reCAPTCHA**
+  --- End Content ---
+
+User Authentication for Next.js: Top Tools and Recommendations for ...
+  URL: https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025
+  Complete guide to user authentication for Next.js in 2025. Compare Clerk, Auth0, NextAuth.js, Supabase Auth, and other solutions with ...
+
+  --- Content ---
+  [Skip to main content](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025#main)
+  
+  ![](https://clerk.com/_next/static/media/hero.89d3b034.webp?dpl=dpl_GyBhWTnKRUikZgjojogn2jXqZsJf)
+  
+  User authentication in Next.js has become significantly more sophisticated—and more critical—than ever before. **Credential theft was the initial access vector in 38% of data breaches** according to Verizon's 2024 Data Breach Investigations Report ( [Verizon DBIR, 2024⁠](https://www.hipaajournal.com/verizon-2024-data-breach-investigations-report/)), making authentication the single most important security decision you'll make for your application. This guide provides an objective analysis of every major authentication solution, technical patterns, and security considerations to help you make an informed choice.
+  
+  The landscape has shifted dramatically with Next.js's [App Router](https://clerk.com/glossary#app-router) architecture. Solutions like Clerk, Auth0, NextAuth.js, Supabase Auth, and others now compete across dimensions of developer experience, security depth, and integration with Server Components and Edge Runtime. This guide provides an objective comparison to help you make an informed choice based on your team's expertise, budget, security requirements, and scaling plans.
+  
+  Important
+  
+  This article was updated March 11, 2026. The updates and changes reflect the major [Core 3](https://clerk.com/changelog/2026-03-03-core-3) release from March 3, 2026 and Clerk's [new pricing](https://clerk.com/changelog/2026-02-05-new-plans-more-value) launched February 5, 2026
+  
+  ## [Why authentication choice matters in 2025](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#why-authentication-choice-matters-in-2025)
+  
+  The stakes for authentication have never been higher. According to IBM's 2024 Cost of a Data Breach Report, the global average breach cost reached **$4.88 million**—a 10% year-over-year increase ( [IBM Report, 2024⁠](https://newsroom.ibm.com/2024-07-30-ibm-report-escalating-data-breach-disruption-pushes-costs-to-new-highs)). Breaches involving stolen credentials take the longest to detect at **292 days on average**, compounding both financial and reputational damage ( [IBM Report, 2024⁠](https://newsroom.ibm.com/2024-07-30-ibm-report-escalating-data-breach-disruption-pushes-costs-to-new-highs)).
+  
+  A critical vulnerability in Next.js (CVE-2025-29927, CVSS 9.1) exposed how easily middleware-based authentication can be bypassed through improper handling of the `x-middleware-subrequest` header ( [GitHub Advisory, 2025⁠](https://github.com/advisories/GHSA-f82v-jwr5-mffw)). The exploit required only adding a single HTTP header to completely circumvent security checks. This incident highlighted why authentication architecture decisions carry long-term security implications.
+  
+  Microsoft's research indicates that **over 99.9% of compromised enterprise accounts lacked multi-factor authentication (MFA)** ( [Microsoft Research, 2019⁠](https://www.microsoft.com/en-us/security/blog/2019/08/20/one-simple-action-you-can-take-to-prevent-99-9-percent-of-account-attacks/)), yet only 11% of enterprise accounts had MFA enabled at the time of the study. Whether you choose a managed provider, open-source solution, or custom implementation, closing this gap should be a priority.
+  
+  ## [Clerk: Purpose-built for modern Next.js](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#clerk-purpose-built-for-modern-next-js)
+  
+  Clerk offers first-class support for both App Router and [Pages Router](https://clerk.com/glossary#pages-router) with purpose-built helpers for [React Server Components](https://clerk.com/glossary#react-server-components) ( [Clerk Documentation](https://clerk.com/docs/reference/nextjs/overview)).
+  
+  **Core capabilities include:**
+  
+  - **[`auth()`](https://clerk.com/docs/reference/nextjs/auth) and [`currentUser()`](https://clerk.com/docs/reference/nextjs/current-user)** async functions designed specifically for Server Components, Route Handlers, Middleware, and Server Actions ( [Clerk Documentation](https://clerk.com/docs/nextjs/guides/users/reading))
+  - **[`clerkMiddleware()`](https://clerk.com/docs/reference/nextjs/clerk-middleware)** with `createRouteMatcher()` for pattern-based route protection
+  - **Pre-built UI components** ( [`<SignIn />`](https://clerk.com/docs/reference/components/authentication/sign-in), [`<SignUp />`](https://clerk.com/docs/reference/components/authentication/sign-up), [`<UserButton />`](https://clerk.com/docs/reference/components/user/user-button)) that can be customized via CSS variables and themes
+  - **Full Edge Runtime compatibility** with isomorphic helpers that work regardless of runtime environment
+  - **[Organizations and multi-tenancy](https://clerk.com/docs/organizations/overview)** with [SAML](https://clerk.com/glossary#security-assertion-markup-language-saml)/ [OIDC](https://clerk.com/glossary/openid-connect) enterprise [SSO](https://clerk.com/glossary#single-sign-on-sso), custom roles, and permissions
+  
+  Setup time consistently clocks in at **under 5 minutes** according to developer testimonials ( [G2 Reviews, 2024⁠](https://www.g2.com/products/clerk-dev/reviews)). Clerk's security posture includes SOC 2 Type II compliance, GDPR compliance via Data Privacy Framework certification ( [Clerk Documentation](https://clerk.com/legal/dpa)), [CCPA](https://clerk.com/glossary#california-consumer-privacy-act-ccpa) compliance, breached password detection against the HaveIBeenPwned database, account lockout after **100 failed attempts**, AI-based [bot protection](https://clerk.com/glossary#bot-detection), and configurable [session management](https://clerk.com/glossary#session-management) ( [Clerk Documentation](https://clerk.com/docs/security/overview)). The free tier includes **50,000 monthly retained users (MRU)** ( [Clerk Pricing](https://clerk.com/pricing)).
+  
+  For enterprise requirements, Clerk offers [HIPAA compliance](https://clerk.com/user-authentication) with BAA and **99.99% uptime SLA**.
+  
+  **Trade-offs to consider:** As a younger company compared to Auth0/Okta, Clerk has a shorter track record in enterprise environments. Organizations with strict vendor evaluation processes may weigh this differently. Pricing can also escalate at scale—teams projecting hundreds of thousands of users should model costs carefully against open-source alternatives, which is a good practice when considering any managed solution.
+  
+  ## [Auth0: Enterprise maturity and ecosystem depth](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#auth0-enterprise-maturity-and-ecosystem-depth)
+  
+  Auth0, now part of Okta, represents the most established enterprise option with over a decade of production deployment history. Its `@auth0/nextjs-auth0` SDK provides comprehensive integration with automatic route creation (`/auth/login`, `/auth/logout`, `/auth/callback`) and full middleware support for Edge Runtime.
+  
+  **Where Auth0 excels:**
+  
+  - **Security depth** \- [OAuth 2.0](https://clerk.com/glossary#oauth)/OpenID Connect compliance, DPoP (Demonstrating Proof-of-Possession) token binding, encrypted session cookies, adaptive [MFA](https://clerk.com/glossary#multi-factor-authentication-mfa) that triggers based on device, location, or behavioral signals
+  - **Enterprise identity** \- SAML, [LDAP](https://clerk.com/glossary#ldap), Active Directory integration, and 30+ [social providers](https://clerk.com/glossary#social-login) out of the box
+  - **Anomaly detection** \- Built-in threat intelligence for identifying suspicious login patterns
+  - **Extensive documentation** \- Years of accumulated guides, tutorials, and community solutions
+  
+  Auth0's free tier includes **25,000 MAUs** with unlimited social connections and one custom domain. The platform has a proven track record with Fortune 500 companies and offers dedicated enterprise support with SLAs.
+  
+  **Trade-offs to consider:** Pricing complexity has drawn criticism—costs can escalate unpredictably as you grow ( [Sagar Sangwan, 2025⁠](https://medium.com/@sagarsangwan/next-js-authentication-showdown-nextauth-free-databases-vs-clerk-vs-auth0-in-2025-e40b3e8b0c45)). Configuration happens primarily through the Auth0 dashboard rather than code, which some teams find limiting for infrastructure-as-code practices. The SDK, while comprehensive, isn't as tightly integrated with Next.js's latest features as purpose-built alternatives.
+  
+  ## [NextAuth.js: Open-source flexibility and data ownership](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#next-auth-js-open-source-flexibility-and-data-ownership)
+  
+  NextAuth.js (rebranding to Auth.js for framework-agnostic support) dominates open-source authentication with **2 million weekly npm downloads** and over 27,000 GitHub stars ( [NPM Statistics, 2024⁠](https://socket.dev/npm/package/next-auth); [GitHub Statistics, 2024⁠](https://alternativeto.net/software/nextauth/about/)). Version 5 introduces an App Router-first architecture with a universal `auth()` function that consolidates multiple v4 methods ( [Auth.js Documentation⁠](https://authjs.dev/getting-started/migrating-to-v5)).
+  
+  **Where NextAuth.js excels:**
+  
+  - **Complete data ownership** \- User data lives in your database, not a third-party service
+  - **No vendor lock-in** \- Open-source with configuration in code, not a dashboard
+  - **Extensive provider support** \- **80+ OAuth providers**, email magic links, and credentials authentication with **20+ database adapters** including Prisma, Drizzle, and Supabase ( [Auth.js Documentation⁠](https://authjs.dev/))
+  - **Zero marginal cost** \- No per-MAU fees regardless of scale
+  - **Community ecosystem** \- Large community, extensive Stack Overflow coverage, and adapters for most databases
+  
+  For organizations requiring maximum control over their authentication infrastructure or facing strict [data residency](https://clerk.com/glossary#data-residency) requirements, NextAuth.js is often the right choice.
+  
+  **Trade-offs to consider:** The credentials provider forces JWT strategy and doesn't automatically persist users to the database. MFA is not built-in—implementations require custom development. [Access token](https://clerk.com/glossary#access-token) rotation must be handled manually through callbacks. Some database adapters aren't Edge-compatible, requiring split configuration. Version 5 remains in beta (available via the [`next-auth`⁠](https://www.npmjs.com/package/next-auth) package), and the migration from v4 requires meaningful refactoring. You're responsible for security maintenance and staying current with vulnerabilities.
+  
+  ## [Other providers worth evaluating](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#other-providers-worth-evaluating)
+  
+  **Supabase Auth** delivers excellent SSR support through its dedicated `@supabase/ssr` package ( [Supabase Documentation⁠](https://supabase.com/docs/guides/auth/server-side/nextjs)). The middleware automatically refreshes expired auth tokens, and the `getUser()` method validates against the auth server on every call. The standout feature is **Row-Level Security (RLS)** integration—authentication rules defined once in your database apply automatically across your entire stack including REST API, Edge Functions, and Realtime subscriptions. The Pro plan includes **100,000 MAUs** with additional users at **$0.00325 per MAU** ( [Supabase Pricing⁠](https://supabase.com/pricing)). Best for teams already using or planning to adopt the Supabase ecosystem.
+  
+  **AWS Cognito** through Amplify Gen 2 provides enterprise-grade features including user pools, identity pools, federated identities, and adaptive authentication. Organizations already invested in AWS benefit from tight IAM integration and consolidated billing. However, complexity is substantial—configuration options are numerous, some are irreversible after initial setup, and the AWS Console learning curve is steep. Best for AWS-native architectures where infrastructure standardization is a priority.
+  
+  **Firebase Authentication** has strong mobile SDK support and integrates seamlessly with other Firebase services. Recent FirebaseServerApp improvements help with SSR, though the JavaScript SDK was designed primarily for client-side use. Community libraries like `next-firebase-auth` don't fully support App Router yet. Best for teams with existing Firebase infrastructure or React Native applications sharing authentication.
+  
+  **Kinde** offers fast Next.js setup with native App Router support, `withAuth` middleware helper, and combines auth, feature flags, and billing in one platform. The **10,500 MAU free tier** is generous ( [Kinde Pricing⁠](https://kinde.com/pricing/)). As a newer entrant, Kinde is worth evaluating for startups prioritizing speed to market.
+  
+  **Okta** targets enterprise B2B applications with SCIM provisioning, Universal Directory, lifecycle management, and comprehensive [audit](https://clerk.com/glossary#audit-logs) capabilities. Integration typically routes through NextAuth.js's Okta provider ( [SSOJet Guide⁠](https://ssojet.com/blog/integrating-okta-saml-sso-with-your-next-js-application)). Best for enterprises with complex identity federation requirements or existing Okta deployments.
+  
+  ## [Next.js authentication patterns that matter](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#next-js-authentication-patterns-that-matter)
+  
+  [Middleware](https://clerk.com/glossary#middleware)-based authentication centralizes security checks before routes render. However, **middleware runs on Edge Runtime** (prior to Next.js 15.2), which cannot make database calls ( [Clerk Blog](https://clerk.com/blog/what-is-middleware-in-nextjs)). The recommended pattern uses cookie-only checks for optimistic redirects in middleware while performing full session validation in pages using Node.js runtime.
+  
+  proxy.ts
+  
+  ```
+  import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+  
+  const isProtectedRoute = createRouteMatcher(['/dashboard(.*)'])
+  
+  export default clerkMiddleware(async (auth, req) => {
+    if (isProtectedRoute(req)) await auth.protect()
+  })
+  
+  export const config = {
+    matcher: [\
+      // Skip Next.js internals and all static files, unless found in search params\
+      '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',\
+      // Always run for API routes\
+      '/(api|trpc)(.*)',\
+    ],
+  }
+  ```
+  
+  Server Components provide a secure environment since they execute server-side only. Be cautious with Layouts—they don't re-render on navigation, so session checks may not run on every route change. Route protection should happen at the page level.
+  
+  **[JWT](https://clerk.com/glossary#json-web-token) versus database sessions** presents a fundamental architectural choice ( [Wisp CMS Guide, 2024⁠](https://www.wisp.blog/blog/best-practices-in-implementing-jwt-in-nextjs-15)). JWTs scale horizontally without database lookups and work in Edge Runtime, but cannot be revoked until expiration. Database sessions enable immediate revocation—essential for "sign out everywhere" features—but require roundtrips that add latency. NextAuth.js middleware requires JWT strategy since database sessions aren't Edge-compatible.
+  
+  For session cookies, OWASP mandates **[HttpOnly](https://clerk.com/glossary#httponly-cookies)** (prevents [XSS](https://clerk.com/glossary#cross-site-scripting-xss) access), **Secure** (HTTPS only), and **SameSite** ( [CSRF](https://clerk.com/glossary#cross-site-request-forgery-csrf) protection). The `__Host-` prefix ensures cookies are only sent to the host that set them.
+  
+  ## [Why custom authentication rarely makes sense](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#why-custom-authentication-rarely-makes-sense)
+  
+  Building custom authentication sounds appealing until you calculate the true cost. Industry estimates place basic SSO implementation at **3-6 developer-months**, with building enterprise-grade authentication systems costing **$250,000 to $500,000** in initial investment ( [Prefactor Analysis, 2025⁠](https://prefactor.tech/blog/build-vs-buy-2025-authentication)). Annual maintenance costs for self-built SSO solutions **easily exceed $100,000**, while ongoing maintenance consumes **15-20% of a developer's time** ( [Industry Analysis, 2024⁠](https://guptadeepak.com/the-enterprise-ready-dilemma-navigating-authentication-challenges-in-b2b-saas/)). Authentication becomes a "permanent engineering workstream" demanding ongoing security expertise as attack vectors evolve.
+  
+  The Next.js vulnerability (CVE-2025-29927) demonstrates how even framework-level bugs can bypass entire authentication systems. Custom implementations must account for middleware trust issues, "fail-open" design flaws, header manipulation vulnerabilities, and insufficient validation layers.
+  
+  StackOverflow contains thousands of unanswered questions about SSO and SAML implementations—illustrating the complexity teams face. While organizations expect SSO integrations to complete within 1-3 months, **74% report actual implementation times of 3-9 months**, with traditional methods delaying product launches by **6-12 weeks** ( [Digibee Report, 2024⁠](https://www.digibee.com/en/blog/enterprise-integration-and-challenge-of-implementation-time/); [SSOJet Analysis, 2024⁠](https://www.einpresswire.com/article/796922370/ssojet-eliminates-enterprise-sso-integration-complexity-for-b2b-saas-companies-reducing-go-live-time-by-weeks)).
+  
+  **Fewer than 5% of engineering teams** should build authentication from scratch according to industry analysis ( [FusionAuth Analysis⁠](https://fusionauth.io/buildvsbuy)). The exceptions are organizations with dedicated security teams, unique compliance requirements not served by existing solutions, or authentication as a core product feature.
+  
+  ## [Security requirements and compliance considerations](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#security-requirements-and-compliance-considerations)
+  
+  OWASP authentication guidelines recommend **minimum 8-character passwords with MFA** or 15 characters without, allowing all characters including unicode and whitespace. Periodic password rotation is discouraged—only rotate on suspected compromise. Blocking breached passwords through services like Pwned Passwords API should be standard.
+  
+  Server Actions in Next.js have built-in CSRF protection through POST-only methods, SameSite cookies, origin validation, and encrypted action IDs. Route Handlers require manual CSRF protection when using custom GET/POST handlers.
+  
+  Never store tokens in localStorage—it's vulnerable to XSS attacks. HttpOnly cookies remain the gold standard for token storage. For JWTs, include only user ID, role, and permissions; never store PII, passwords, or sensitive data in the payload.
+  
+  Compliance certifications vary by provider: Clerk holds [SOC 2](https://clerk.com/glossary#soc-2) Type II with optional [HIPAA](https://clerk.com/glossary#health-insurance-portability-accountability-act-hipaa) compliance and GDPR/CCPA support; Auth0 offers SOC 2, HIPAA, and numerous industry certifications on enterprise tiers; Supabase offers SOC 2 on Team plans with HIPAA as an add-on; NextAuth.js requires self-managed compliance since you control the infrastructure ( [Monetizely Analysis, 2024⁠](https://www.getmonetizely.com/articles/clerk-vs-supabase-auth-how-to-choose-the-right-authentication-service-for-your-budget)).
+  
+  ## [Choosing the right solution for your project](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#choosing-the-right-solution-for-your-project)
+  
+  The authentication landscape for Next.js offers legitimate options across the spectrum, and the right choice depends on your specific constraints and priorities.
+  
+  **Choose Clerk if:** You're building a new Next.js application and prioritize developer experience, rapid implementation, and modern framework integration. Clerk's purpose-built SDK, pre-built components, and [webhook](https://clerk.com/glossary#webhook) support for database syncing make it particularly well-suited for teams that want comprehensive security without deep authentication expertise ( [Clerk](https://clerk.com/user-authentication)).
+  
+  **Choose Auth0 if:** You need enterprise identity features, have complex federation requirements, or your organization already uses Okta products. Auth0's decade-plus track record and extensive compliance certifications provide confidence for risk-averse enterprises.
+  
+  **Choose NextAuth.js if:** Data ownership is non-negotiable, you have strict data residency requirements, budget constraints rule out per-user pricing, or you need maximum customization. Teams with strong engineering capacity who can invest in implementation and ongoing maintenance will find it highly capable.
+  
+  **Choose Supabase Auth if:** You're building on the Supabase platform and want unified authentication with Row-Level Security. The tight database integration eliminates the need for separate [authorization](https://clerk.com/glossary#authorization) logic.
+  
+  **Choose AWS Cognito if:** You're committed to AWS infrastructure and value consolidated billing and IAM integration over developer experience.
+  
+  The critical insight from security data is clear: authentication is too important and too complex to treat as an afterthought. Whether you choose a managed platform or open-source solution, the decision should be intentional, well-researched, and aligned with your security posture and growth trajectory.
+  
+  ## [Conclusion](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#conclusion)
+  
+  Authentication in Next.js has matured into a well-served market with solutions spanning every use case. The data supports a clear principle: managed platforms significantly reduce risk and development time compared to custom implementations, while open-source options provide maximum control for teams with specific requirements.
+  
+  The **$4.88 million average breach cost** and **292-day detection time** for credential-based attacks should inform every authentication decision. Building custom authentication generates technical debt and security exposure that compounds over time—fewer than 5% of engineering teams should attempt it.
+  
+  Among managed solutions, Clerk offers particularly strong Next.js integration with its purpose-built SDK, pre-built components, and comprehensive security features ( [Clerk Documentation](https://clerk.com/docs)). Auth0 brings unmatched enterprise maturity. NextAuth.js provides data ownership and zero marginal costs. Supabase Auth excels for teams already in that ecosystem.
+  
+  For teams evaluating options, the path forward involves honest assessment of your security requirements, development capacity, data ownership needs, and long-term scaling economics. The solutions exist—the key is matching your constraints to the right tool.
+  
+  * * *
+  
+  ## [Frequently Asked Questions](https://clerk.com/articles/user-authentication-for-nextjs-top-tools-and-recommendations-for-2025\#frequently-asked-questions)
+  
+  What is the best authentication solution for Next.js in 2025?
+  
+  There's no single "best" solution—it depends on your constraints. **Clerk** excels at developer experience and rapid implementation with purpose-built Next.js integration. **Auth0** offers the deepest enterprise features and longest track record. **NextAuth.js** provides complete data ownership at zero marginal cost. **Supabase Auth** integrates tightly if you're using their database. Evaluate based on: budget model (per-user vs self-hosted), data ownership requirements, enterprise compliance needs, and your team's capacity to implement and maintain authentication code.
+  
+  Should I build custom authentication or use a managed provider?
+  
+  For most applications, managed providers or established open-source solutions are strongly recommended. Building custom authentication typically requires 3-6 months of development time and $250,000+ for enterprise-grade implementations. Custom solutions create ongoing maintenance burden—authentication becomes a "permanent engineering workstream." The March 2025 Next.js middleware vulnerability (CVE-2025-29927) demonstrated how framework-level bugs can bypass authentication, making well-maintained solutions valuable. Exceptions: organizations with dedicated security teams, unique compliance requirements, or authentication as a core product feature.
+  
+  How does authentication work with the Next.js App Router?
+  
+  Next.js App Router introduces Server Components and a new middleware system that changes authentication patterns. Authentication typically involves three layers: **Middleware** for edge-level route protection and redirects, **Server Components** for secure data fetching with user context, and **Client Components** for interactive UI elements. Most providers now offer App Router-specific helpers—for example, Clerk provides [first-class App Router support](https://clerk.com/docs/reference/nextjs/overview#app-router) with `auth()` and `currentUser()` helpers designed specifically for Server Components, Route Handlers, and Server Actions. The key consideration: middleware runs on Edge Runtime (prior to Next.js 15.2), which cannot make database calls, so database-backed session validation should happen at the page level.
+  
+  What's the difference between JWT and session-based authentication in Next.js?
+  
+  **JWT (JSON Web Tokens)** are stateless tokens that don't require database lookups. They scale horizontally and work with Edge Runtime, but cannot be revoked until expiration. **Session-based authentication** stores data server-side, enabling immediate revocation ("sign out everywhere"), but requires database roundtrips. NextAuth.js middleware requires JWT since database sessions aren't Edge-compatible. Some providers use hybrid approaches—Clerk uses short-lived (60-second) tokens with automatic refresh to balance security and usability. Choose based on whether immediate session revocation is a requirement.
+  
+  How do I protect routes and API endpoints in Next.js?
+  
+  Route protection typically combines middleware for initial checks with page-level validation for full security. Most providers offer middleware helpers—Clerk has `clerkMiddleware()` ( [Clerk Documentation](https://clerk.com/docs/reference/nextjs/clerk-middleware)), NextAuth.js has `withAuth()`. For API routes, wrap handlers with authentication checks. Key principles: never rely solely on client-side checks (they can be bypassed), always validate sessions server-side, and implement re-verification for sensitive operations. The specific implementation depends on your chosen provider.
+  
+  Can I sync authentication data to my own database?
+  
+  Yes. **Clerk** provides webhook events (`user.created`, `user.updated`, `user.deleted`) for syncing to external databases ( [Clerk Documentation](https://clerk.com/docs/webhooks/sync-data)). **NextAuth.js** stores user data in your database by default through adapters—no sync needed. **Supabase Auth** writes directly to your Supabase database. **Auth0** supports webhooks and Actions for data synchronization. Database syncing is essential for applications with social features where you need to display information about users other than the currently signed-in user. When using webhooks, implement retry logic and handle eventual consistency.
+  
+  What security features should I look for in a Next.js authentication provider?
+  
+  Essential features: **Multi-factor authentication (MFA)** with TOTP or hardware key support; **breached password detection**; **rate limiting and bot protection**; **session management** with configurable timeouts and revocation; **secure cookie handling** (HttpOnly, Secure, SameSite). For enterprise: SOC 2 Type II certification, SAML/OIDC SSO, SCIM provisioning, audit logs, and compliance certifications (HIPAA, GDPR, CCPA). Evaluate which features are included in base pricing versus add-ons—this varies significantly between providers.
+  
+  How do I migrate from one authentication provider to another?
+  
+  Migration complexity varies. General steps: export existing user data (emails, metadata), import users via the new provider's API, update application code, and coordinate password resets (hashes usually can't be migrated). Most providers offer migration guides. Plan for a transition period with both systems running, and test thoroughly in staging. Migrations from custom auth to managed providers are typically smoother than provider-to-provider migrations. Budget days to weeks depending on user volume and complexity.
+  
+  Is NextAuth.js really free? What are the hidden costs?
+  
+  NextAuth.js is open-source with no license fees, but total cost of ownership includes: database hosting for sessions, developer hours for implementation (40-80+ hours for production-ready auth), ongoing maintenance as the framework evolves, and implementing features that managed providers include (MFA, bot protection, breach detection). The v5 migration requires meaningful refactoring. For projects with small teams or limited authentication expertise, a managed provider's free tier may be more cost-effective when factoring in development time. For projects at scale with engineering capacity, NextAuth.js can be significantly cheaper than per-user pricing.
+  
+  Support
+  --- End Content ---

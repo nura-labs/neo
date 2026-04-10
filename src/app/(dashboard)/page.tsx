@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/auth-context";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { nodeTypeColors } from "@/lib/graph/colors";
@@ -14,17 +15,22 @@ interface Overview {
 }
 
 export default function DashboardPage() {
+  const { getIdToken } = useAuth();
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    apiFetch<Overview>("/api/knowledge/overview").then((res) => {
-      if (res.ok) setOverview(res.data);
+    getIdToken().then((token) => {
+      apiFetch<Overview>("/api/knowledge/overview", token).then((res) => {
+        if (res.ok) setOverview(res.data);
+        setLoaded(true);
+      });
     });
-  }, []);
+  }, [getIdToken]);
 
-  if (!overview) {
-    return <p className="text-muted-foreground">Loading...</p>;
-  }
+  if (!loaded) return <p className="text-muted-foreground">Loading...</p>;
+
+  if (!overview) return <p className="text-muted-foreground">Failed to load overview.</p>;
 
   return (
     <div className="space-y-6">
@@ -33,9 +39,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Knowledge Nodes
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Knowledge Nodes</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{overview.totalNodes}</div>
@@ -43,9 +47,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Connections
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Connections</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{overview.totalEdges}</div>
@@ -53,9 +55,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Sources
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Sources</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{overview.sourceBreakdown.length}</div>
@@ -65,9 +65,7 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">By Type</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">By Type</CardTitle></CardHeader>
           <CardContent>
             {overview.typeBreakdown.length === 0 ? (
               <p className="text-sm text-muted-foreground">No knowledge indexed yet</p>
@@ -76,10 +74,7 @@ export default function DashboardPage() {
                 {overview.typeBreakdown.map((t) => (
                   <div key={t.type} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: nodeTypeColors[t.type] ?? "#6b7280" }}
-                      />
+                      <div className="h-3 w-3 rounded-full" style={{ backgroundColor: nodeTypeColors[t.type] ?? "#6b7280" }} />
                       <span className="text-sm">{t.type}</span>
                     </div>
                     <span className="text-sm font-medium">{t.count}</span>
@@ -89,11 +84,8 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recent</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Recent</CardTitle></CardHeader>
           <CardContent>
             {overview.recentNodes.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -104,9 +96,7 @@ export default function DashboardPage() {
                 {overview.recentNodes.map((n) => (
                   <div key={n.id}>
                     <p className="text-sm font-medium">{n.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {n.type} {n.source ? `- ${n.source}` : ""}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{n.type} {n.source ? `- ${n.source}` : ""}</p>
                   </div>
                 ))}
               </div>
