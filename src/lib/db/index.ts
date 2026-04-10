@@ -8,7 +8,7 @@ const pool = new Pool(
         host: process.env.INSTANCE_UNIX_SOCKET,
         database: process.env.DB_NAME,
         user: process.env.DB_USER,
-        password: process.env.DB_PASS,
+        password: process.env.DB_PASS?.trim(),
       }
     : {
         connectionString: process.env.DATABASE_URL,

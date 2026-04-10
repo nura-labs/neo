@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { useAuth } from "@/contexts/auth-context";
 import { apiFetch } from "@/lib/api";
 import { nodeTypeColors } from "@/lib/graph/colors";
 import { Badge } from "@/components/ui/badge";
@@ -26,24 +25,20 @@ interface RelatedNode {
 export default function KnowledgeDetailPage() {
   const params = useParams();
   const id = params.id as string;
-  const { user } = useAuth();
   const [node, setNode] = useState<KnowledgeNode | null>(null);
   const [related, setRelated] = useState<RelatedNode[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
-    user.getIdToken().then((token) => {
-      Promise.all([
-        apiFetch<KnowledgeNode>(`/api/knowledge/${id}`, token),
-        apiFetch<RelatedNode[]>(`/api/knowledge/${id}/related`, token),
-      ]).then(([nodeRes, relatedRes]) => {
-        if (nodeRes.ok) setNode(nodeRes.data);
-        if (relatedRes.ok) setRelated(relatedRes.data);
-        setLoading(false);
-      });
+    Promise.all([
+      apiFetch<KnowledgeNode>(`/api/knowledge/${id}`),
+      apiFetch<RelatedNode[]>(`/api/knowledge/${id}/related`),
+    ]).then(([nodeRes, relatedRes]) => {
+      if (nodeRes.ok) setNode(nodeRes.data);
+      if (relatedRes.ok) setRelated(relatedRes.data);
+      setLoading(false);
     });
-  }, [id, user]);
+  }, [id]);
 
   if (loading) return <p className="text-muted-foreground">Loading...</p>;
   if (!node) return <p className="text-destructive">Node not found</p>;

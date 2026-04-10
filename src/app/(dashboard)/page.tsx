@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/contexts/auth-context";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { nodeTypeColors } from "@/lib/graph/colors";
@@ -15,20 +14,15 @@ interface Overview {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-
-    user.getIdToken().then((token) => {
-      apiFetch<Overview>("/api/knowledge/overview", token).then((res) => {
-        if (res.ok) setOverview(res.data);
-        setLoaded(true);
-      });
+    apiFetch<Overview>("/api/knowledge/overview").then((res) => {
+      if (res.ok) setOverview(res.data);
+      setLoaded(true);
     });
-  }, [user]);
+  }, []);
 
   if (!loaded) return <p className="text-muted-foreground">Loading...</p>;
   if (!overview) return <p className="text-muted-foreground">Failed to load overview.</p>;

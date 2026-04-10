@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/contexts/auth-context";
 import { apiFetch } from "@/lib/api";
 import { nodeTypeColors } from "@/lib/graph/colors";
 import Link from "next/link";
@@ -17,23 +16,19 @@ interface KnowledgeNode {
 }
 
 export default function KnowledgePage() {
-  const { user } = useAuth();
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
-    user.getIdToken().then((token) => {
-      apiFetch<{ nodes: KnowledgeNode[]; total: number }>("/api/knowledge", token).then((res) => {
-        if (res.ok) {
-          setNodes(res.data.nodes);
-          setTotal(res.data.total);
-        }
-        setLoading(false);
-      });
+    apiFetch<{ nodes: KnowledgeNode[]; total: number }>("/api/knowledge").then((res) => {
+      if (res.ok) {
+        setNodes(res.data.nodes);
+        setTotal(res.data.total);
+      }
+      setLoading(false);
     });
-  }, [user]);
+  }, []);
 
   if (loading) return <p className="text-muted-foreground">Loading...</p>;
 

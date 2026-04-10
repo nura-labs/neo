@@ -4,8 +4,14 @@ import { getNodesByUser, createNode } from "@/lib/db/queries";
 import { createNodeSchema } from "@/lib/validators/knowledge";
 
 export async function GET(request: Request) {
+  let user;
   try {
-    const user = await getAuthenticatedUser(request);
+    user = await getAuthenticatedUser(request);
+  } catch {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  try {
     const url = new URL(request.url);
     const type = url.searchParams.get("type") ?? undefined;
     const source = url.searchParams.get("source") ?? undefined;
@@ -15,8 +21,9 @@ export async function GET(request: Request) {
 
     const result = await getNodesByUser(user.id, { type, source, tags, page, limit });
     return NextResponse.json(result);
-  } catch {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  } catch (err) {
+    console.error("knowledge query failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 

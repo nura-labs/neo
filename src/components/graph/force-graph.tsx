@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getNodeColor } from "@/lib/graph/colors";
-import { useAuth } from "@/contexts/auth-context";
 import { apiFetch } from "@/lib/api";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
@@ -36,17 +35,13 @@ export function KnowledgeGraph() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const router = useRouter();
-  const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) return;
-    user.getIdToken().then((token) => {
-      apiFetch<GraphData>("/api/graph", token).then((res) => {
-        if (res.ok) setData(res.data);
-        setLoading(false);
-      });
+    apiFetch<GraphData>("/api/graph").then((res) => {
+      if (res.ok) setData(res.data);
+      setLoading(false);
     });
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     function updateSize() {
