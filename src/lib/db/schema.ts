@@ -1,0 +1,78 @@
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  jsonb,
+  index,
+  uniqueIndex,
+  real,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  firebaseUid: text("firebase_uid").notNull().unique(),
+  apiToken: text("api_token").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const knowledgeNodes = pgTable(
+  "knowledge_nodes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    tags: text("tags")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    source: text("source"),
+    sourceMeta: jsonb("source_meta").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("knowledge_nodes_user_id_idx").on(table.userId),
+    index("knowledge_nodes_type_idx").on(table.userId, table.type),
+    index("knowledge_nodes_source_idx").on(table.userId, table.source),
+  ]
+);
+
+export const knowledgeEdges = pgTable(
+  "knowledge_edges",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => knowledgeNodes.id, { onDelete: "cascade" }),
+    targetId: uuid("target_id")
+      .notNull()
+      .references(() => knowledgeNodes.id, { onDelete: "cascade" }),
+    relationship: text("relationship").notNull(),
+    weight: real("weight").notNull().default(1.0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("knowledge_edges_source_idx").on(table.sourceId),
+    index("knowledge_edges_target_idx").on(table.targetId),
+    uniqueIndex("knowledge_edges_unique_idx").on(
+      table.sourceId,
+      table.targetId,
+      table.relationship
+    ),
+  ]
+);
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type KnowledgeNode = typeof knowledgeNodes.$inferSelect;
+export type NewKnowledgeNode = typeof knowledgeNodes.$inferInsert;
+export type KnowledgeEdge = typeof knowledgeEdges.$inferSelect;
+export type NewKnowledgeEdge = typeof knowledgeEdges.$inferInsert;
