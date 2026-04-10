@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     description: "Neo captures how your team builds and makes that knowledge available to every AI agent. By Nura Labs.",
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: "/icon.svg",
   },
 };
 

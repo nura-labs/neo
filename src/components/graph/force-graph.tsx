@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getNodeColor } from "@/lib/graph/colors";
 import { apiFetch } from "@/lib/api";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
@@ -21,8 +20,8 @@ interface GraphNode {
 }
 
 interface GraphLink {
-  source: string;
-  target: string;
+  source: string | GraphNode;
+  target: string | GraphNode;
   name: string;
 }
 
@@ -34,6 +33,7 @@ interface GraphData {
 export function KnowledgeGraph() {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(true);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -60,59 +60,105 @@ export function KnowledgeGraph() {
     return () => window.removeEventListener("resize", updateSize);
   }, []);
 
-  const handleNodeClick = useCallback(
-    (node: { id?: string | number }) => {
-      if (node.id) router.push(`/knowledge/${node.id}`);
+  // Find connected nodes for highlight
+  const connectedNodes = useCallback(
+    (nodeId: string | null) => {
+      if (!nodeId) return new Set<string>();
+      const connected = new Set<string>();
+      connected.add(nodeId);
+      data.links.forEach((link) => {
+        const sourceId = typeof link.source === "string" ? link.source : link.source.id;
+        const targetId = typeof link.target === "string" ? link.target : link.target.id;
+        if (sourceId === nodeId) connected.add(targetId);
+        if (targetId === nodeId) connected.add(sourceId);
+      });
+      return connected;
     },
-    [router]
+    [data.links]
   );
+
+  const activeNode = selectedNode || hoveredNode;
+  const highlighted = connectedNodes(activeNode);
+  const hasActive = activeNode !== null;
 
   const paintNode = useCallback(
     (node: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const n = node as GraphNode;
       const x = n.x ?? 0;
       const y = n.y ?? 0;
-      const isHovered = hoveredNode === n.id;
-      const baseSize = Math.max(3, Math.min(8, 3 + n.val));
-      const size = isHovered ? baseSize * 1.4 : baseSize;
+      const isActive = n.id === activeNode;
+      const isConnected = highlighted.has(n.id);
+      const dimmed = hasActive && !isConnected;
 
-      // Glow effect
-      if (isHovered) {
+      // Node size — uniform, small
+      const size = isActive ? 5 : 3.5;
+
+      // Glow for active node
+      if (isActive) {
         ctx.beginPath();
-        ctx.arc(x, y, size + 4, 0, 2 * Math.PI);
-        ctx.fillStyle = getNodeColor(n.type) + "30";
+        ctx.arc(x, y, size + 6, 0, 2 * Math.PI);
+        ctx.fillStyle = "rgba(120, 140, 255, 0.12)";
         ctx.fill();
       }
 
       // Node circle
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
-      ctx.fillStyle = getNodeColor(n.type);
+      if (dimmed) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
+      } else if (isActive) {
+        ctx.fillStyle = "#fff";
+      } else if (isConnected && hasActive) {
+        ctx.fillStyle = "rgba(160, 180, 255, 0.8)";
+      } else {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+      }
       ctx.fill();
 
-      // Border
-      ctx.strokeStyle = "rgba(255,255,255,0.15)";
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-
-      // Label — show always if zoomed in enough, or on hover
-      const fontSize = Math.max(10 / globalScale, 2);
-      if (globalScale > 0.8 || isHovered) {
-        ctx.font = `${isHovered ? "bold " : ""}${fontSize}px sans-serif`;
+      // Label
+      const fontSize = Math.max(11 / globalScale, 1.5);
+      const showLabel = isActive || isConnected || globalScale > 1.5;
+      if (showLabel && !dimmed) {
+        ctx.font = `${isActive ? "600 " : ""}${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillStyle = isHovered
-          ? "rgba(255,255,255,0.95)"
-          : "rgba(255,255,255,0.6)";
-        ctx.fillText(n.name, x, y + size + 2);
+        ctx.fillStyle = isActive
+          ? "rgba(255, 255, 255, 0.9)"
+          : isConnected && hasActive
+            ? "rgba(255, 255, 255, 0.7)"
+            : "rgba(255, 255, 255, 0.4)";
+
+        // Truncate long names
+        let label = n.name;
+        if (label.length > 30 && !isActive) {
+          label = label.substring(0, 28) + "...";
+        }
+        ctx.fillText(label, x, y + size + 2);
       }
     },
-    [hoveredNode]
+    [activeNode, highlighted, hasActive]
   );
+
+  const handleNodeClick = useCallback(
+    (node: object) => {
+      const n = node as GraphNode;
+      if (selectedNode === n.id) {
+        // Double click — navigate to detail
+        router.push(`/knowledge/${n.id}`);
+      } else {
+        setSelectedNode(n.id);
+      }
+    },
+    [selectedNode, router]
+  );
+
+  const handleBackgroundClick = useCallback(() => {
+    setSelectedNode(null);
+  }, []);
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-neutral-500 text-sm">
         Loading graph...
       </div>
     );
@@ -120,42 +166,50 @@ export function KnowledgeGraph() {
 
   if (data.nodes.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        No knowledge nodes yet. Install the Neo skill and index a project to see
-        your graph.
+      <div className="flex h-full items-center justify-center text-neutral-500 text-sm">
+        No knowledge nodes yet. Install the Neo skill and index a project to see your graph.
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="h-full w-full">
+    <div ref={containerRef} className="h-full w-full relative">
       <ForceGraph2D
         graphData={data}
         width={dimensions.width}
         height={dimensions.height}
-        backgroundColor="#0a0a0a"
+        backgroundColor="#1a1a2e"
         nodeRelSize={1}
-        nodeVal={(node) => {
-          const n = node as GraphNode;
-          return Math.max(1, Math.min(5, n.val));
-        }}
+        nodeVal={() => 1}
         nodeCanvasObject={paintNode}
         nodeCanvasObjectMode={() => "replace"}
-        linkColor={() => "rgba(255,255,255,0.08)"}
-        linkWidth={0.5}
+        linkColor={(link) => {
+          if (!hasActive) return "rgba(255, 255, 255, 0.06)";
+          const sourceId = typeof (link as GraphLink).source === "string" ? (link as GraphLink).source as string : ((link as GraphLink).source as GraphNode).id;
+          const targetId = typeof (link as GraphLink).target === "string" ? (link as GraphLink).target as string : ((link as GraphLink).target as GraphNode).id;
+          if (highlighted.has(sourceId) && highlighted.has(targetId)) {
+            return "rgba(120, 140, 255, 0.3)";
+          }
+          return "rgba(255, 255, 255, 0.02)";
+        }}
+        linkWidth={(link) => {
+          if (!hasActive) return 0.3;
+          const sourceId = typeof (link as GraphLink).source === "string" ? (link as GraphLink).source as string : ((link as GraphLink).source as GraphNode).id;
+          const targetId = typeof (link as GraphLink).target === "string" ? (link as GraphLink).target as string : ((link as GraphLink).target as GraphNode).id;
+          if (highlighted.has(sourceId) && highlighted.has(targetId)) return 1;
+          return 0.1;
+        }}
         linkDirectionalArrowLength={0}
-        linkDirectionalParticles={1}
-        linkDirectionalParticleWidth={1}
-        linkDirectionalParticleSpeed={0.003}
-        linkDirectionalParticleColor={() => "rgba(255,255,255,0.15)"}
+        linkDirectionalParticles={0}
         onNodeClick={handleNodeClick}
         onNodeHover={(node) =>
           setHoveredNode(node ? ((node as GraphNode).id ?? null) : null)
         }
+        onBackgroundClick={handleBackgroundClick}
         d3AlphaDecay={0.02}
-        d3VelocityDecay={0.3}
-        warmupTicks={50}
-        cooldownTicks={100}
+        d3VelocityDecay={0.25}
+        warmupTicks={80}
+        cooldownTicks={200}
         enableZoomInteraction={true}
         enablePanInteraction={true}
         enableNodeDrag={true}
