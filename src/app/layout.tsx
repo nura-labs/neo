@@ -14,20 +14,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Neo — Knowledge Graph for Developers",
-  description: "A persistent knowledge graph that makes your AI agents smarter. By Nura Labs.",
+  title: "Neo — The Behavioral Memory Layer",
+  description: "Neo captures how your team builds and makes that knowledge available to every AI agent. By Nura Labs.",
   metadataBase: new URL("https://neo.nura.sh"),
   openGraph: {
-    title: "Neo — Knowledge Graph for Developers",
-    description: "A persistent knowledge graph that makes your AI agents smarter. Index your codebase, and your AI agents will always know how your team builds.",
+    title: "Neo — The Behavioral Memory Layer",
+    description: "Neo captures how your team builds and makes that knowledge available to every AI agent. Your patterns, conventions, and decisions — persistent across every session.",
     url: "https://neo.nura.sh",
     siteName: "Neo by Nura Labs",
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "Neo — Knowledge Graph for Developers",
-    description: "A persistent knowledge graph that makes your AI agents smarter. By Nura Labs.",
+    title: "Neo — The Behavioral Memory Layer",
+    description: "Neo captures how your team builds and makes that knowledge available to every AI agent. By Nura Labs.",
   },
   icons: {
     icon: "/favicon.ico",
