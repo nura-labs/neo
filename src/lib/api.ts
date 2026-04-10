@@ -4,6 +4,8 @@ export async function apiFetch<T = unknown>(
   path: string,
   options?: RequestInit
 ): Promise<{ ok: boolean; status: number; data: T }> {
+  await auth.authStateReady();
+
   const user = auth.currentUser;
   const token = user ? await user.getIdToken() : null;
 
