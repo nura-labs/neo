@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { McpUrl } from "@/components/settings/mcp-url";
+import { CopyCommand } from "@/components/settings/copy-command";
 import { useAuth } from "@/contexts/auth-context";
 
 export default function SettingsPage() {
@@ -20,26 +20,16 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           <div>
             <p className="text-sm font-medium mb-2">1. Install the skill</p>
-            <div className="rounded-md bg-muted p-3">
-              <code className="text-xs">npx skills add nura-labs/neo-skill</code>
-            </div>
+            <CopyCommand command="npx skills add nura-labs/neo-skill" />
           </div>
 
           <div>
             <p className="text-sm font-medium mb-2">2. Add the MCP server</p>
-            <div className="space-y-3">
-              <div className="rounded-md bg-muted p-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Claude Code:</p>
-                <code className="text-xs">claude mcp add --transport http neo {appUrl}/api/mcp</code>
-              </div>
-              <div className="rounded-md bg-muted p-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Codex (~/.codex/config.toml):</p>
-                <code className="text-xs">[mcp_servers.neo]{"\n"}url = &quot;{appUrl}/api/mcp&quot;</code>
-              </div>
-            </div>
+            <CopyCommand
+              label="Claude Code:"
+              command={`claude mcp add --transport http neo ${appUrl}/api/mcp`}
+            />
           </div>
-
-          <McpUrl appUrl={appUrl} />
         </CardContent>
       </Card>
 

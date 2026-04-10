@@ -36,6 +36,7 @@ export function KnowledgeGraph() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fgRef = useRef<{ zoomToFit: (ms?: number, px?: number) => void } | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const router = useRouter();
 
@@ -184,20 +185,20 @@ export function KnowledgeGraph() {
         nodeCanvasObject={paintNode}
         nodeCanvasObjectMode={() => "replace"}
         linkColor={(link) => {
-          if (!hasActive) return "rgba(255, 255, 255, 0.06)";
+          if (!hasActive) return "rgba(255, 255, 255, 0.15)";
           const sourceId = typeof (link as GraphLink).source === "string" ? (link as GraphLink).source as string : ((link as GraphLink).source as GraphNode).id;
           const targetId = typeof (link as GraphLink).target === "string" ? (link as GraphLink).target as string : ((link as GraphLink).target as GraphNode).id;
           if (highlighted.has(sourceId) && highlighted.has(targetId)) {
-            return "rgba(120, 140, 255, 0.3)";
+            return "rgba(140, 160, 255, 0.5)";
           }
-          return "rgba(255, 255, 255, 0.02)";
+          return "rgba(255, 255, 255, 0.03)";
         }}
         linkWidth={(link) => {
-          if (!hasActive) return 0.3;
+          if (!hasActive) return 0.5;
           const sourceId = typeof (link as GraphLink).source === "string" ? (link as GraphLink).source as string : ((link as GraphLink).source as GraphNode).id;
           const targetId = typeof (link as GraphLink).target === "string" ? (link as GraphLink).target as string : ((link as GraphLink).target as GraphNode).id;
-          if (highlighted.has(sourceId) && highlighted.has(targetId)) return 1;
-          return 0.1;
+          if (highlighted.has(sourceId) && highlighted.has(targetId)) return 1.5;
+          return 0.15;
         }}
         linkDirectionalArrowLength={0}
         linkDirectionalParticles={0}
@@ -207,9 +208,16 @@ export function KnowledgeGraph() {
         }
         onBackgroundClick={handleBackgroundClick}
         d3AlphaDecay={0.02}
-        d3VelocityDecay={0.25}
-        warmupTicks={80}
-        cooldownTicks={200}
+        d3VelocityDecay={0.2}
+        warmupTicks={100}
+        cooldownTicks={300}
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+        ref={fgRef as any}
+        onEngineStop={() => {
+          if (fgRef.current) {
+            fgRef.current.zoomToFit(400, 80);
+          }
+        }}
         enableZoomInteraction={true}
         enablePanInteraction={true}
         enableNodeDrag={true}
