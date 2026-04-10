@@ -37,7 +37,7 @@ export function KnowledgeGraph() {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<{ zoomToFit: (ms?: number, px?: number) => void } | null>(null);
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const router = useRouter();
 
   useEffect(() => {
@@ -48,17 +48,21 @@ export function KnowledgeGraph() {
   }, []);
 
   useEffect(() => {
+    if (!containerRef.current) return;
+    const el = containerRef.current;
+
     function updateSize() {
-      if (containerRef.current) {
-        setDimensions({
-          width: containerRef.current.offsetWidth,
-          height: containerRef.current.offsetHeight,
-        });
-      }
+      setDimensions({
+        width: el.clientWidth,
+        height: el.clientHeight,
+      });
     }
+
     updateSize();
-    window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
+
+    const ro = new ResizeObserver(updateSize);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   // Find connected nodes for highlight
@@ -159,7 +163,7 @@ export function KnowledgeGraph() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-neutral-500 text-sm">
+      <div ref={containerRef} className="h-full w-full flex items-center justify-center text-neutral-500 text-sm">
         Loading graph...
       </div>
     );
@@ -167,7 +171,7 @@ export function KnowledgeGraph() {
 
   if (data.nodes.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-neutral-500 text-sm">
+      <div ref={containerRef} className="h-full w-full flex items-center justify-center text-neutral-500 text-sm">
         No knowledge nodes yet. Install the Neo skill and index a project to see your graph.
       </div>
     );
@@ -175,7 +179,7 @@ export function KnowledgeGraph() {
 
   return (
     <div ref={containerRef} className="h-full w-full relative">
-      <ForceGraph2D
+      {dimensions.width > 0 && dimensions.height > 0 && <ForceGraph2D
         graphData={data}
         width={dimensions.width}
         height={dimensions.height}
@@ -185,20 +189,20 @@ export function KnowledgeGraph() {
         nodeCanvasObject={paintNode}
         nodeCanvasObjectMode={() => "replace"}
         linkColor={(link) => {
-          if (!hasActive) return "rgba(255, 255, 255, 0.15)";
+          if (!hasActive) return "rgba(255, 255, 255, 0.35)";
           const sourceId = typeof (link as GraphLink).source === "string" ? (link as GraphLink).source as string : ((link as GraphLink).source as GraphNode).id;
           const targetId = typeof (link as GraphLink).target === "string" ? (link as GraphLink).target as string : ((link as GraphLink).target as GraphNode).id;
           if (highlighted.has(sourceId) && highlighted.has(targetId)) {
-            return "rgba(140, 160, 255, 0.5)";
+            return "rgba(140, 160, 255, 0.7)";
           }
-          return "rgba(255, 255, 255, 0.03)";
+          return "rgba(255, 255, 255, 0.06)";
         }}
         linkWidth={(link) => {
-          if (!hasActive) return 0.5;
+          if (!hasActive) return 0.8;
           const sourceId = typeof (link as GraphLink).source === "string" ? (link as GraphLink).source as string : ((link as GraphLink).source as GraphNode).id;
           const targetId = typeof (link as GraphLink).target === "string" ? (link as GraphLink).target as string : ((link as GraphLink).target as GraphNode).id;
-          if (highlighted.has(sourceId) && highlighted.has(targetId)) return 1.5;
-          return 0.15;
+          if (highlighted.has(sourceId) && highlighted.has(targetId)) return 2;
+          return 0.2;
         }}
         linkDirectionalArrowLength={0}
         linkDirectionalParticles={0}
@@ -215,13 +219,13 @@ export function KnowledgeGraph() {
         ref={fgRef as any}
         onEngineStop={() => {
           if (fgRef.current) {
-            fgRef.current.zoomToFit(400, 80);
+            fgRef.current.zoomToFit(400, 40);
           }
         }}
         enableZoomInteraction={true}
         enablePanInteraction={true}
         enableNodeDrag={true}
-      />
+      />}
     </div>
   );
 }
