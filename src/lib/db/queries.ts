@@ -1,14 +1,31 @@
 import { eq, and, sql, desc, arrayContains, inArray, lt } from "drizzle-orm";
 import { db } from "./index";
-import { users, knowledgeNodes, knowledgeEdges, oauthClients, oauthCodes } from "./schema";
+import { users, knowledgeNodes, knowledgeEdges, dreamSuggestions, oauthClients, oauthCodes } from "./schema";
 import type {
   User,
   KnowledgeNode,
   KnowledgeEdge,
   NewKnowledgeNode,
+  DreamSuggestion,
 } from "./schema";
 import type { CreateNodeInput, UpdateNodeInput } from "../validators/knowledge";
 import { randomBytes } from "crypto";
+import { generateUniqueSlug } from "../utils/slugify";
+import { syncWikilinkEdges } from "../knowledge/sync-edges";
+import { generateNodeEmbedding } from "../knowledge/embeddings";
+
+// ─── Embedding Helper ──────────────────────────────────
+
+function updateEmbeddingInBackground(nodeId: string, title: string, content: string) {
+  generateNodeEmbedding(title, content)
+    .then((embedding) =>
+      db
+        .update(knowledgeNodes)
+        .set({ embedding })
+        .where(eq(knowledgeNodes.id, nodeId))
+    )
+    .catch((err) => console.error(`Embedding failed for node ${nodeId}:`, err));
+}
 
 // ─── Users ──────────────────────────────────────────────
 
@@ -79,10 +96,13 @@ export async function createNode(
 ): Promise<KnowledgeNode> {
   const { relatedTo, ...nodeData } = input;
 
+  const slug = await generateUniqueSlug(userId, nodeData.title);
+
   const [node] = await db
     .insert(knowledgeNodes)
     .values({
       userId,
+      slug,
       type: nodeData.type,
       title: nodeData.title,
       content: nodeData.content,
@@ -102,6 +122,12 @@ export async function createNode(
     );
   }
 
+  // Auto-generate edges from [[wikilinks]] in content
+  await syncWikilinkEdges(userId, node.id, node.content);
+
+  // Generate embedding in background (non-blocking)
+  updateEmbeddingInBackground(node.id, node.title, node.content);
+
   return node;
 }
 
@@ -110,15 +136,34 @@ export async function updateNode(
   userId: string,
   input: UpdateNodeInput
 ): Promise<KnowledgeNode | null> {
+  const updates: Record<string, unknown> = {
+    ...input,
+    updatedAt: new Date(),
+  };
+
+  if (input.title) {
+    updates.slug = await generateUniqueSlug(userId, input.title);
+  }
+
   const [node] = await db
     .update(knowledgeNodes)
-    .set({
-      ...input,
-      updatedAt: new Date(),
-    })
+    .set(updates)
     .where(and(eq(knowledgeNodes.id, nodeId), eq(knowledgeNodes.userId, userId)))
     .returning();
-  return node ?? null;
+
+  if (!node) return null;
+
+  // Re-sync wikilink edges when content changes
+  if (input.content) {
+    await syncWikilinkEdges(userId, nodeId, input.content);
+  }
+
+  // Regenerate embedding if title or content changed
+  if (input.title || input.content) {
+    updateEmbeddingInBackground(nodeId, node.title, node.content);
+  }
+
+  return node;
 }
 
 export async function deleteNode(
@@ -140,6 +185,18 @@ export async function getNodeById(
     .select()
     .from(knowledgeNodes)
     .where(and(eq(knowledgeNodes.id, nodeId), eq(knowledgeNodes.userId, userId)))
+    .limit(1);
+  return node ?? null;
+}
+
+export async function getNodeBySlug(
+  slug: string,
+  userId: string
+): Promise<KnowledgeNode | null> {
+  const [node] = await db
+    .select()
+    .from(knowledgeNodes)
+    .where(and(eq(knowledgeNodes.slug, slug), eq(knowledgeNodes.userId, userId)))
     .limit(1);
   return node ?? null;
 }
@@ -210,12 +267,14 @@ export async function searchNodes(
     .select({
       id: knowledgeNodes.id,
       userId: knowledgeNodes.userId,
+      slug: knowledgeNodes.slug,
       type: knowledgeNodes.type,
       title: knowledgeNodes.title,
       content: knowledgeNodes.content,
       tags: knowledgeNodes.tags,
       source: knowledgeNodes.source,
       sourceMeta: knowledgeNodes.sourceMeta,
+      embedding: knowledgeNodes.embedding,
       createdAt: knowledgeNodes.createdAt,
       updatedAt: knowledgeNodes.updatedAt,
       rank: sql<number>`ts_rank(
@@ -238,6 +297,70 @@ export async function searchNodes(
     .limit(20);
 
   return nodes;
+}
+
+export async function semanticSearch(
+  userId: string,
+  queryEmbedding: number[],
+  filters?: { type?: string; source?: string; tags?: string[] }
+): Promise<KnowledgeNode[]> {
+  const vectorStr = `[${queryEmbedding.join(",")}]`;
+  const conditions = [
+    eq(knowledgeNodes.userId, userId),
+    sql`${knowledgeNodes.embedding} IS NOT NULL`,
+  ];
+
+  if (filters?.type) conditions.push(eq(knowledgeNodes.type, filters.type));
+  if (filters?.source) conditions.push(eq(knowledgeNodes.source, filters.source));
+  if (filters?.tags && filters.tags.length > 0) {
+    conditions.push(arrayContains(knowledgeNodes.tags, filters.tags));
+  }
+
+  const nodes = await db
+    .select()
+    .from(knowledgeNodes)
+    .where(and(...conditions))
+    .orderBy(sql`embedding <=> ${vectorStr}::vector`)
+    .limit(20);
+
+  return nodes;
+}
+
+export async function hybridSearch(
+  userId: string,
+  query: string,
+  queryEmbedding: number[] | null,
+  filters?: { type?: string; source?: string; tags?: string[] }
+): Promise<KnowledgeNode[]> {
+  const textResults = await searchNodes(userId, query, filters);
+
+  if (!queryEmbedding) return textResults;
+
+  const vectorResults = await semanticSearch(userId, queryEmbedding, filters);
+
+  // Reciprocal Rank Fusion (k=60)
+  const k = 60;
+  const scores = new Map<string, { score: number; node: KnowledgeNode }>();
+
+  textResults.forEach((node, i) => {
+    const score = 1 / (k + i + 1);
+    scores.set(node.id, { score, node });
+  });
+
+  vectorResults.forEach((node, i) => {
+    const score = 1 / (k + i + 1);
+    const existing = scores.get(node.id);
+    if (existing) {
+      existing.score += score;
+    } else {
+      scores.set(node.id, { score, node });
+    }
+  });
+
+  return Array.from(scores.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20)
+    .map((s) => s.node);
 }
 
 export async function getOverview(userId: string) {
@@ -300,7 +423,8 @@ export async function createEdge(data: {
   targetId: string;
   relationship: string;
   weight?: number;
-}): Promise<KnowledgeEdge> {
+  autoGenerated?: boolean;
+}): Promise<KnowledgeEdge | null> {
   const [edge] = await db
     .insert(knowledgeEdges)
     .values({
@@ -308,16 +432,27 @@ export async function createEdge(data: {
       targetId: data.targetId,
       relationship: data.relationship,
       weight: data.weight ?? 1.0,
+      autoGenerated: data.autoGenerated ?? false,
     })
     .onConflictDoNothing()
     .returning();
-  return edge;
+  return edge ?? null;
 }
 
-export async function deleteEdge(edgeId: string): Promise<boolean> {
+export async function deleteEdge(edgeId: string, userId: string): Promise<boolean> {
+  // Verify the edge belongs to a node owned by this user before deleting
   const result = await db
     .delete(knowledgeEdges)
-    .where(eq(knowledgeEdges.id, edgeId))
+    .where(
+      and(
+        eq(knowledgeEdges.id, edgeId),
+        sql`EXISTS (
+          SELECT 1 FROM knowledge_nodes
+          WHERE knowledge_nodes.id = ${knowledgeEdges.sourceId}
+            AND knowledge_nodes.user_id = ${userId}
+        )`
+      )
+    )
     .returning({ id: knowledgeEdges.id });
   return result.length > 0;
 }
@@ -477,4 +612,40 @@ export async function markOAuthCodeUsed(code: string) {
     .update(oauthCodes)
     .set({ used: true })
     .where(eq(oauthCodes.code, code));
+}
+
+// ─── Dream Suggestions ────────────────────────────────
+
+export async function getPendingSuggestions(
+  userId: string
+): Promise<DreamSuggestion[]> {
+  return db
+    .select()
+    .from(dreamSuggestions)
+    .where(
+      and(
+        eq(dreamSuggestions.userId, userId),
+        eq(dreamSuggestions.status, "pending")
+      )
+    )
+    .orderBy(desc(dreamSuggestions.createdAt))
+    .limit(50);
+}
+
+export async function resolveSuggestion(
+  suggestionId: string,
+  userId: string,
+  action: "accepted" | "dismissed"
+): Promise<DreamSuggestion | null> {
+  const [suggestion] = await db
+    .update(dreamSuggestions)
+    .set({ status: action })
+    .where(
+      and(
+        eq(dreamSuggestions.id, suggestionId),
+        eq(dreamSuggestions.userId, userId)
+      )
+    )
+    .returning();
+  return suggestion ?? null;
 }

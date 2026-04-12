@@ -3,9 +3,11 @@ import { z } from "zod";
 import {
   getOverview,
   searchNodes,
+  hybridSearch,
   getNodeById,
   getRelatedNodes,
 } from "@/lib/db/queries";
+import { generateEmbedding } from "@/lib/knowledge/embeddings";
 
 export function registerReadTools(server: McpServer) {
   server.tool(
@@ -32,7 +34,7 @@ export function registerReadTools(server: McpServer) {
         `### Recent`,
         ...overview.recentNodes.map(
           (n) =>
-            `- **${n.title}** (${n.type}) — ${n.source ?? "no source"}`
+            `- **${n.title}** (${n.type}) — ${n.source ?? "no source"} [slug: ${n.slug}]`
         ),
       ];
 
@@ -47,13 +49,24 @@ export function registerReadTools(server: McpServer) {
     "Search your knowledge graph using full-text search. Returns matching knowledge nodes ranked by relevance.",
     {
       query: z.string().describe("Search query"),
-      type: z.string().optional().describe("Filter by node type (pattern, convention, module, architecture, decision, concept, note, reference)"),
+      type: z.string().optional().describe("Filter by node type (pattern, convention, module, architecture, decision, concept, note, reference, person, project, tool, research)"),
       source: z.string().optional().describe("Filter by source (e.g. github:org/repo)"),
       tags: z.array(z.string()).optional().describe("Filter by tags"),
     },
     async ({ query, type, source, tags }, { authInfo }) => {
       const userId = authInfo?.extra?.userId as string;
-      const nodes = await searchNodes(userId, query, { type, source, tags });
+
+      // Try hybrid search (text + semantic), fallback to text-only
+      let queryEmbedding: number[] | null = null;
+      try {
+        queryEmbedding = await generateEmbedding(query);
+      } catch {
+        // Fall back to text-only search if embeddings unavailable
+      }
+
+      const nodes = queryEmbedding
+        ? await hybridSearch(userId, query, queryEmbedding, { type, source, tags })
+        : await searchNodes(userId, query, { type, source, tags });
 
       if (nodes.length === 0) {
         return {
@@ -66,7 +79,7 @@ export function registerReadTools(server: McpServer) {
       const text = nodes
         .map(
           (n) =>
-            `### ${n.title}\n**Type:** ${n.type} | **Source:** ${n.source ?? "none"} | **Tags:** ${n.tags.join(", ") || "none"}\n\n${n.content.slice(0, 500)}${n.content.length > 500 ? "..." : ""}\n\n---`
+            `### ${n.title}\n**Slug:** ${n.slug} | **Type:** ${n.type} | **Source:** ${n.source ?? "none"} | **Tags:** ${n.tags.join(", ") || "none"}\n\n${n.content.slice(0, 500)}${n.content.length > 500 ? "..." : ""}\n\n---`
         )
         .join("\n\n");
 
@@ -94,14 +107,14 @@ export function registerReadTools(server: McpServer) {
       const related = await getRelatedNodes(id, userId);
       const relatedText =
         related.length > 0
-          ? `\n\n## Related\n${related.map((r) => `- ${r.direction === "outgoing" ? "→" : "←"} **${r.node.title}** (${r.edge.relationship})`).join("\n")}`
+          ? `\n\n## Related\n${related.map((r) => `- ${r.direction === "outgoing" ? "→" : "←"} **${r.node.title}** (${r.edge.relationship}) [slug: ${r.node.slug}]`).join("\n")}`
           : "";
 
       return {
         content: [
           {
             type: "text" as const,
-            text: `# ${node.title}\n**Type:** ${node.type} | **Source:** ${node.source ?? "none"} | **Tags:** ${node.tags.join(", ") || "none"}\n\n${node.content}${relatedText}`,
+            text: `# ${node.title}\n**Slug:** ${node.slug} | **Type:** ${node.type} | **Source:** ${node.source ?? "none"} | **Tags:** ${node.tags.join(", ") || "none"}\n\n${node.content}${relatedText}`,
           },
         ],
       };
@@ -130,7 +143,7 @@ export function registerReadTools(server: McpServer) {
       const text = related
         .map(
           (r) =>
-            `- ${r.direction === "outgoing" ? "→" : "←"} **${r.node.title}** (${r.edge.relationship}) — ${r.node.type}, source: ${r.node.source ?? "none"}`
+            `- ${r.direction === "outgoing" ? "→" : "←"} **${r.node.title}** (${r.edge.relationship}) — ${r.node.type}, slug: ${r.node.slug}`
         )
         .join("\n");
 
@@ -180,4 +193,5 @@ export function registerReadTools(server: McpServer) {
       };
     }
   );
+
 }

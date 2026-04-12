@@ -1,40 +1,54 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createNode, updateNode, deleteNode } from "@/lib/db/queries";
-import {
-  knowledgeNodeTypes,
-  edgeRelationships,
-} from "@/lib/validators/knowledge";
+import { createNode, updateNode, deleteNode, getNodeBySlug, createEdge } from "@/lib/db/queries";
+import { knowledgeNodeTypes, edgeRelationships } from "@/lib/validators/knowledge";
+import { generateSlug } from "@/lib/utils/slugify";
 
 export function registerWriteTools(server: McpServer) {
   server.tool(
     "add_knowledge",
-    "Add a new knowledge node to your graph. Use this to index patterns, conventions, architecture, modules, decisions, concepts, notes, or references from your codebase or any source.",
+    "Add a new knowledge node to your graph. Use this to index patterns, conventions, architecture, modules, decisions, concepts, notes, references, people, projects, tools, or research. You can link to other nodes using [[wikilinks]] in your content — e.g. [[Auth Pattern]] or [[React|uses]].",
     {
-      type: z.enum(knowledgeNodeTypes).describe("Type of knowledge"),
-      title: z.string().describe("Descriptive title"),
-      content: z.string().describe("Full content in markdown, including real code examples"),
+      type: z.enum(knowledgeNodeTypes).describe("Type of knowledge: pattern, convention, module, architecture, decision, concept, note, reference, person, project, tool, research"),
+      title: z.string().describe("Descriptive title — this becomes the node's slug for wikilinks"),
+      content: z.string().describe("Full content in markdown. Use [[Node Title]] to link to other nodes, or [[Node Title|relationship]] for typed links (uses, follows, contains, depends_on, related_to, extends, contradicts, alternative_to, same_concept, evolved_from, implements)"),
       tags: z.array(z.string()).optional().describe("Tags for categorization"),
       source: z.string().optional().describe("Where this knowledge comes from (e.g. github:org/repo, url:https://...)"),
       source_meta: z
         .record(z.string(), z.unknown())
         .optional()
-        .describe("Additional metadata about the source (e.g. language, framework, year)"),
+        .describe("Additional metadata about the source"),
       related_to: z
         .array(
           z.object({
-            id: z.string().uuid().describe("ID of the related node"),
+            title: z.string().describe("Title of the related node (resolved by slug)"),
             relationship: z.enum(edgeRelationships).describe("Type of relationship"),
           })
         )
         .optional()
-        .describe("Create edges to existing nodes"),
+        .describe("Create edges to existing nodes by title (no UUIDs needed)"),
     },
     async (
       { type, title, content, tags, source, source_meta, related_to },
       { authInfo }
     ) => {
       const userId = authInfo?.extra?.userId as string;
+
+      // Resolve related_to titles to IDs
+      const resolvedRelations: { id: string; relationship: typeof edgeRelationships[number] }[] = [];
+      const unresolvedTitles: string[] = [];
+
+      if (related_to) {
+        for (const rel of related_to) {
+          const slug = generateSlug(rel.title);
+          const target = await getNodeBySlug(slug, userId);
+          if (target) {
+            resolvedRelations.push({ id: target.id, relationship: rel.relationship });
+          } else {
+            unresolvedTitles.push(rel.title);
+          }
+        }
+      }
 
       const node = await createNode(userId, {
         type,
@@ -43,18 +57,71 @@ export function registerWriteTools(server: McpServer) {
         tags: tags ?? [],
         source,
         sourceMeta: source_meta ?? {},
-        relatedTo:
-          related_to?.map((r) => ({
-            id: r.id,
-            relationship: r.relationship,
-          })) ?? [],
+        relatedTo: resolvedRelations,
       });
+
+      let response = `Knowledge node created:\n- **ID:** ${node.id}\n- **Slug:** ${node.slug}\n- **Title:** ${node.title}\n- **Type:** ${node.type}`;
+
+      if (node.source) response += `\n- **Source:** ${node.source}`;
+      if (node.tags.length > 0) response += `\n- **Tags:** ${node.tags.join(", ")}`;
+      if (resolvedRelations.length > 0) response += `\n- **Edges created:** ${resolvedRelations.length}`;
+      if (unresolvedTitles.length > 0) response += `\n- **Unresolved links:** ${unresolvedTitles.join(", ")} (nodes not found)`;
+
+      return {
+        content: [{ type: "text" as const, text: response }],
+      };
+    }
+  );
+
+  server.tool(
+    "link_knowledge",
+    "Create a relationship between two existing knowledge nodes by their titles. No UUIDs needed.",
+    {
+      source_title: z.string().describe("Title of the source node"),
+      target_title: z.string().describe("Title of the target node"),
+      relationship: z.enum(edgeRelationships).describe("Type of relationship: uses, follows, contains, depends_on, related_to, extends, contradicts, alternative_to, same_concept, evolved_from, implements"),
+    },
+    async ({ source_title, target_title, relationship }, { authInfo }) => {
+      const userId = authInfo?.extra?.userId as string;
+
+      const sourceSlug = generateSlug(source_title);
+      const targetSlug = generateSlug(target_title);
+
+      const [sourceNode, targetNode] = await Promise.all([
+        getNodeBySlug(sourceSlug, userId),
+        getNodeBySlug(targetSlug, userId),
+      ]);
+
+      if (!sourceNode) {
+        return {
+          content: [{ type: "text" as const, text: `Source node not found: "${source_title}" (slug: ${sourceSlug})` }],
+          isError: true,
+        };
+      }
+      if (!targetNode) {
+        return {
+          content: [{ type: "text" as const, text: `Target node not found: "${target_title}" (slug: ${targetSlug})` }],
+          isError: true,
+        };
+      }
+
+      const edge = await createEdge({
+        sourceId: sourceNode.id,
+        targetId: targetNode.id,
+        relationship,
+      });
+
+      if (!edge) {
+        return {
+          content: [{ type: "text" as const, text: `Edge already exists: "${source_title}" → ${relationship} → "${target_title}"` }],
+        };
+      }
 
       return {
         content: [
           {
             type: "text" as const,
-            text: `Knowledge node created:\n- **ID:** ${node.id}\n- **Title:** ${node.title}\n- **Type:** ${node.type}\n- **Source:** ${node.source ?? "none"}\n- **Tags:** ${node.tags.join(", ") || "none"}${related_to && related_to.length > 0 ? `\n- **Edges created:** ${related_to.length}` : ""}`,
+            text: `Linked: **${sourceNode.title}** → ${relationship} → **${targetNode.title}**`,
           },
         ],
       };
@@ -63,11 +130,11 @@ export function registerWriteTools(server: McpServer) {
 
   server.tool(
     "update_knowledge",
-    "Update an existing knowledge node",
+    "Update an existing knowledge node. Use [[wikilinks]] in content to auto-create connections.",
     {
       id: z.string().uuid().describe("ID of the node to update"),
       title: z.string().optional().describe("New title"),
-      content: z.string().optional().describe("New content"),
+      content: z.string().optional().describe("New content (supports [[wikilinks]])"),
       type: z.enum(knowledgeNodeTypes).optional().describe("New type"),
       tags: z.array(z.string()).optional().describe("New tags (replaces existing)"),
     },
@@ -93,7 +160,7 @@ export function registerWriteTools(server: McpServer) {
         content: [
           {
             type: "text" as const,
-            text: `Updated node "${node.title}" (${node.id})`,
+            text: `Updated node **${node.title}** (${node.slug})`,
           },
         ],
       };
@@ -124,4 +191,5 @@ export function registerWriteTools(server: McpServer) {
       };
     }
   );
+
 }

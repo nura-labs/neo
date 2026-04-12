@@ -1,14 +1,31 @@
 import { z } from "zod";
 
 export const knowledgeNodeTypes = [
-  "pattern",
-  "convention",
-  "module",
-  "architecture",
-  "decision",
-  "concept",
-  "note",
-  "reference",
+  // Knowledge types — how things work
+  "pattern",       // Recurring solution (e.g. "Repository Pattern")
+  "convention",    // Team standard (e.g. "API naming conventions")
+  "architecture",  // System design (e.g. "Event-driven architecture")
+  "decision",      // ADR / why we chose X over Y
+  "concept",       // Abstract idea or mental model
+  "workflow",      // Step-by-step process (e.g. "Deploy to production")
+  "snippet",       // Reusable code example
+
+  // Structure types — what things are
+  "module",        // Code module or package
+  "api",           // API endpoint or contract
+  "service",       // External service or microservice
+  "config",        // Configuration pattern or env setup
+
+  // Entity types — who/what is involved
+  "person",        // Team member, stakeholder, contact
+  "project",       // Active project or initiative
+  "team",          // Team or org unit
+  "tool",          // Technology, library, framework
+
+  // Reference types — external knowledge
+  "reference",     // Article, doc, external link
+  "research",      // Investigation, analysis, comparison
+  "note",          // Freeform note, anything else
 ] as const;
 
 export const edgeRelationships = [

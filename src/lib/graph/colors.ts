@@ -1,12 +1,29 @@
 export const nodeTypeColors: Record<string, string> = {
-  pattern: "#60a5fa",       // soft blue
-  convention: "#4ade80",    // soft green
-  module: "#a78bfa",        // soft purple
-  architecture: "#f9a8d4",  // soft pink
+  // Knowledge types
+  pattern: "#60a5fa",       // blue
+  convention: "#4ade80",    // green
+  architecture: "#f9a8d4",  // pink
   decision: "#fbbf24",      // amber
-  concept: "#67e8f9",       // soft cyan
+  concept: "#67e8f9",       // cyan
+  workflow: "#c084fc",      // purple
+  snippet: "#a3e635",       // lime
+
+  // Structure types
+  module: "#a78bfa",        // violet
+  api: "#38bdf8",           // sky
+  service: "#2dd4bf",       // teal
+  config: "#d4d4d8",        // zinc
+
+  // Entity types
+  person: "#f472b6",        // pink
+  project: "#34d399",       // emerald
+  team: "#fb7185",          // rose
+  tool: "#818cf8",          // indigo
+
+  // Reference types
+  reference: "#fb923c",     // orange
+  research: "#fcd34d",      // yellow
   note: "#9ca3af",          // gray
-  reference: "#fb923c",     // soft orange
 };
 
 export function getNodeColor(type: string): string {
