@@ -134,24 +134,24 @@ export function KnowledgeGraph({
         ctx.fill();
       }
 
-      // Node circle — filled with border
+      // Node circle — solid opaque fill, no transparency
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
       if (dimmed) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+        ctx.fillStyle = "#1a1d25";
+        ctx.strokeStyle = "#252830";
       } else if (isActive) {
         ctx.fillStyle = nodeColor;
         ctx.strokeStyle = "#fff";
       } else if (isConnected && hasActive) {
-        ctx.fillStyle = `${nodeColor}bb`;
-        ctx.strokeStyle = `${nodeColor}dd`;
+        ctx.fillStyle = nodeColor;
+        ctx.strokeStyle = `${nodeColor}`;
       } else {
-        ctx.fillStyle = `${nodeColor}66`;
-        ctx.strokeStyle = `${nodeColor}99`;
+        ctx.fillStyle = nodeColor;
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
       }
       ctx.fill();
-      ctx.lineWidth = dimmed ? 0.5 : 1;
+      ctx.lineWidth = isActive ? 1.5 : 0.5;
       ctx.stroke();
 
       // Label
