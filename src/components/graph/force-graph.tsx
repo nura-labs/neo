@@ -138,8 +138,8 @@ export function KnowledgeGraph({
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
       if (dimmed) {
-        ctx.fillStyle = "#231e26";
-        ctx.strokeStyle = "#2b2530";
+        ctx.fillStyle = "#1a181d";
+        ctx.strokeStyle = "#252328";
       } else if (isActive) {
         ctx.fillStyle = nodeColor;
         ctx.strokeStyle = "#fff";

@@ -4,11 +4,11 @@
 /* ─── Neo Design System (Nura Brand) ────────────────────── */
 
 :root {
-  /* Background layers — dark purple tones */
-  --neo-bg: #161017;
-  --neo-surface: #1c171f;
-  --neo-surface2: #231e26;
-  --neo-surface-hover: #2b2530;
+  /* Background — single consistent dark tone */
+  --neo-bg: #121115;
+  --neo-surface: #121115;
+  --neo-surface2: #1a181d;
+  --neo-surface-hover: #1f1d22;
 
   /* Text hierarchy (opacity-based) */
   --neo-fg: #ece9e6;
@@ -21,10 +21,10 @@
   --neo-accent-hover: #f07d50;
   --neo-accent-muted: rgba(232, 112, 64, 0.15);
 
-  /* Borders */
-  --neo-border: rgba(255, 255, 255, 0.07);
-  --neo-border-hover: rgba(255, 255, 255, 0.14);
-  --neo-border-strong: rgba(255, 255, 255, 0.24);
+  /* Borders — white with opacity, CodeRabbit style */
+  --neo-border: rgba(255, 255, 255, 0.10);
+  --neo-border-hover: rgba(255, 255, 255, 0.18);
+  --neo-border-strong: rgba(255, 255, 255, 0.28);
 
   /* Status */
   --neo-success: #4ade80;

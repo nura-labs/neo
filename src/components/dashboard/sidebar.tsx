@@ -53,7 +53,7 @@ export function Sidebar() {
 
   return (
     <motion.aside
-      animate={{ width: collapsed ? 56 : 220 }}
+      animate={{ width: collapsed ? 56 : 240 }}
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
       className="flex flex-col h-screen overflow-hidden shrink-0"
       style={{
@@ -116,7 +116,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors"
+              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors"
               style={{
                 color: active ? "var(--neo-fg)" : "var(--neo-fg-muted)",
                 background: active ? "rgba(255, 255, 255, 0.06)" : "transparent",
@@ -136,7 +136,7 @@ export function Sidebar() {
               }}
               title={collapsed ? item.label : undefined}
             >
-              <item.icon size={16} className="shrink-0" />
+              <item.icon size={18} className="shrink-0" />
               <AnimatePresence>
                 {!collapsed && (
                   <motion.span
@@ -162,10 +162,10 @@ export function Sidebar() {
         {/* Support */}
         <a
           href="mailto:support@nura.sh"
-          className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors"
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors"
           style={{ color: "var(--neo-fg-muted)" }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(255, 255, 255, 0.03)";
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
             e.currentTarget.style.color = "var(--neo-fg-secondary)";
           }}
           onMouseLeave={(e) => {
@@ -174,7 +174,7 @@ export function Sidebar() {
           }}
           title={collapsed ? "Support" : undefined}
         >
-          <HelpCircle size={16} className="shrink-0" />
+          <HelpCircle size={18} className="shrink-0" />
           <AnimatePresence>
             {!collapsed && (
               <motion.span
@@ -191,18 +191,18 @@ export function Sidebar() {
 
         {/* User */}
         {user && (
-          <div className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 overflow-hidden">
+          <div className="flex items-center gap-3 rounded-md px-3 py-2 overflow-hidden">
             {photoURL ? (
               <img
                 src={photoURL}
                 alt=""
-                className="h-5 w-5 rounded-full shrink-0"
+                className="h-7 w-7 rounded-full shrink-0"
                 referrerPolicy="no-referrer"
               />
             ) : (
               <div
-                className="h-5 w-5 rounded-full shrink-0 flex items-center justify-center text-[9px] font-medium"
-                style={{ background: "rgba(255, 255, 255, 0.08)", color: "var(--neo-fg-muted)" }}
+                className="h-7 w-7 rounded-full shrink-0 flex items-center justify-center text-xs font-medium"
+                style={{ background: "rgba(255, 255, 255, 0.10)", color: "var(--neo-fg-secondary)" }}
               >
                 {(user.displayName ?? user.email ?? "U")[0].toUpperCase()}
               </div>
@@ -216,20 +216,20 @@ export function Sidebar() {
                   className="flex-1 min-w-0 flex items-center justify-between"
                 >
                   <span
-                    className="text-[12px] truncate"
-                    style={{ color: "var(--neo-fg-secondary)" }}
+                    className="text-sm truncate"
+                    style={{ color: "var(--neo-fg)" }}
                   >
                     {user.displayName ?? user.email}
                   </span>
                   <button
                     onClick={handleLogout}
-                    className="p-0.5 rounded transition-colors shrink-0"
+                    className="p-1 rounded transition-colors shrink-0"
                     style={{ color: "var(--neo-fg-muted)" }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "var(--neo-fg)")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--neo-fg-muted)")}
                     title="Sign out"
                   >
-                    <LogOut size={13} />
+                    <LogOut size={14} />
                   </button>
                 </motion.div>
               )}
