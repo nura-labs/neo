@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
-import { Header } from "@/components/dashboard/header";
 
 export default function DashboardLayout({
   children,
@@ -22,8 +21,19 @@ export default function DashboardLayout({
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+      <div
+        className="flex h-screen items-center justify-center"
+        style={{ background: "var(--neo-bg)" }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="h-8 w-8 rounded-lg flex items-center justify-center text-sm font-bold"
+            style={{ background: "var(--neo-accent)", color: "#fff" }}
+          >
+            N
+          </div>
+          <span className="neo-text-muted text-sm">Loading...</span>
+        </div>
       </div>
     );
   }
@@ -31,12 +41,9 @@ export default function DashboardLayout({
   if (!user) return null;
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen" style={{ background: "var(--neo-bg)" }}>
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Header userName={user.displayName ?? user.email ?? "User"} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
+      <main className="flex-1 overflow-y-auto p-6">{children}</main>
     </div>
   );
 }
