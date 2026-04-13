@@ -1,50 +1,73 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* ─── Neo Design System (Nura Brand) ────────────────────── */
+/* ─── Neo Design System ─────────────────────────────────── */
 
+/* Dark theme (default) */
 :root {
-  /* Background — single consistent dark tone */
   --neo-bg: #121115;
   --neo-surface: #121115;
   --neo-surface2: #1a181d;
-  --neo-surface-hover: #1f1d22;
+  --neo-surface-hover: rgba(255, 255, 255, 0.04);
 
-  /* Text hierarchy (opacity-based) */
-  --neo-fg: #ece9e6;
-  --neo-fg-secondary: rgba(255, 255, 255, 0.55);
-  --neo-fg-muted: rgba(255, 255, 255, 0.35);
-  --neo-fg-faint: rgba(255, 255, 255, 0.20);
+  --neo-fg: #e8e6e3;
+  --neo-fg-secondary: rgba(255, 255, 255, 0.65);
+  --neo-fg-muted: rgba(255, 255, 255, 0.40);
+  --neo-fg-faint: rgba(255, 255, 255, 0.22);
 
-  /* Accent */
   --neo-accent: #e87040;
   --neo-accent-hover: #f07d50;
   --neo-accent-muted: rgba(232, 112, 64, 0.15);
 
-  /* Borders — white with opacity, CodeRabbit style */
-  --neo-border: rgba(255, 255, 255, 0.10);
-  --neo-border-hover: rgba(255, 255, 255, 0.18);
-  --neo-border-strong: rgba(255, 255, 255, 0.28);
+  --neo-border: rgba(255, 255, 255, 0.12);
+  --neo-border-hover: rgba(255, 255, 255, 0.20);
+  --neo-border-strong: rgba(255, 255, 255, 0.30);
 
-  /* Status */
   --neo-success: #4ade80;
   --neo-warning: #fbbf24;
   --neo-error: #f87171;
 
-  /* Layout */
   --neo-radius: 0.5rem;
   --neo-radius-lg: 0.75rem;
   --neo-radius-xl: 1rem;
-  --neo-sidebar-width: 240px;
+  --neo-sidebar-width: 260px;
   --neo-sidebar-collapsed: 56px;
 
-  /* Fonts */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-display: var(--font-space-grotesk);
+
+  color-scheme: dark;
 }
 
-/* ─── Map to Tailwind/shadcn tokens ─────────────────────── */
+/* Light theme */
+[data-theme="light"] {
+  --neo-bg: #ffffff;
+  --neo-surface: #ffffff;
+  --neo-surface2: #f6f5f4;
+  --neo-surface-hover: rgba(0, 0, 0, 0.03);
+
+  --neo-fg: #1a1a1a;
+  --neo-fg-secondary: rgba(0, 0, 0, 0.65);
+  --neo-fg-muted: rgba(0, 0, 0, 0.40);
+  --neo-fg-faint: rgba(0, 0, 0, 0.20);
+
+  --neo-accent: #d4622e;
+  --neo-accent-hover: #c05828;
+  --neo-accent-muted: rgba(212, 98, 46, 0.10);
+
+  --neo-border: rgba(0, 0, 0, 0.10);
+  --neo-border-hover: rgba(0, 0, 0, 0.18);
+  --neo-border-strong: rgba(0, 0, 0, 0.28);
+
+  --neo-success: #16a34a;
+  --neo-warning: #ca8a04;
+  --neo-error: #dc2626;
+
+  color-scheme: light;
+}
+
+/* ─── Map to Tailwind tokens ────────────────────────────── */
 
 @theme inline {
   --color-background: var(--neo-bg);
@@ -90,14 +113,17 @@
   body {
     background: var(--neo-bg);
     color: var(--neo-fg);
+    transition: background-color 0.2s, color 0.2s;
   }
 
-  /* Selection */
   ::selection {
-    background: rgba(232, 112, 64, 0.35);
+    background: rgba(232, 112, 64, 0.30);
   }
 
-  /* Scrollbar */
+  [data-theme="light"] ::selection {
+    background: rgba(212, 98, 46, 0.20);
+  }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -106,15 +132,15 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--neo-border);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--neo-border-hover);
   }
 }
 
-/* ─── Utility classes ───────────────────────────────────── */
+/* ─── Utilities ─────────────────────────────────────────── */
 
 @layer utilities {
   .neo-surface {
@@ -139,7 +165,7 @@
 
   .neo-label {
     font-family: var(--font-mono), monospace;
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--neo-fg-muted);

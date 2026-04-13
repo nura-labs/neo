@@ -121,29 +121,29 @@ export default function KnowledgePage() {
     <div className="flex h-[calc(100vh-48px)] -m-6">
       {/* Tree sidebar */}
       <aside
-        className="w-[220px] shrink-0 overflow-y-auto flex flex-col"
-        style={{ background: "var(--neo-surface)", borderRight: "1px solid var(--neo-border)" }}
+        className="w-[280px] shrink-0 overflow-y-auto flex flex-col"
+        style={{ background: "var(--neo-bg)", borderRight: "1px solid var(--neo-border)" }}
       >
-        <div className="p-2.5" style={{ borderBottom: "1px solid var(--neo-border)" }}>
+        <div className="p-3" style={{ borderBottom: "1px solid var(--neo-border)" }}>
           <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "var(--neo-fg-muted)" }} />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--neo-fg-muted)" }} />
             <input
               type="text"
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-md pl-8 pr-7 py-1.5 text-xs outline-none"
+              className="w-full rounded-lg pl-9 pr-8 py-2 text-sm outline-none"
               style={{ background: "var(--neo-surface2)", border: "1px solid var(--neo-border)", color: "var(--neo-fg)" }}
               onFocus={(e) => (e.target.style.borderColor = "var(--neo-border-strong)")}
               onBlur={(e) => (e.target.style.borderColor = "var(--neo-border)")}
             />
             {searchQuery && (
-              <button onClick={() => { setSearchQuery(""); setSearchResults(null); }} className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: "var(--neo-fg-muted)" }}><X size={11} /></button>
+              <button onClick={() => { setSearchQuery(""); setSearchResults(null); }} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--neo-fg-muted)" }}><X size={13} /></button>
             )}
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-1">
+        <nav className="flex-1 overflow-y-auto py-2">
           {sortedTypes.map((type) => {
             const items = typeGroups.get(type)!;
             const collapsed = collapsedTypes.has(type);
@@ -151,11 +151,11 @@ export default function KnowledgePage() {
               <div key={type}>
                 <button
                   onClick={() => toggleType(type)}
-                  className="flex items-center gap-1.5 w-full px-3 py-1.5 text-[11px] transition-colors"
+                  className="flex items-center gap-2 w-full px-4 py-2 text-[13px] transition-colors"
                   style={{ color: "var(--neo-fg-muted)" }}
                 >
-                  {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
-                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: nodeTypeColors[type] }} />
+                  {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: nodeTypeColors[type] }} />
                   <span className="uppercase tracking-wider font-medium flex-1 text-left">{type}</span>
                   <span style={{ color: "var(--neo-fg-faint)" }}>{items.length}</span>
                 </button>
@@ -163,15 +163,15 @@ export default function KnowledgePage() {
                   <button
                     key={node.id}
                     onClick={() => selectNode(node)}
-                    className="flex items-center gap-2 w-full text-left px-3 pl-7 py-1 text-[12px] truncate transition-colors"
+                    className="flex items-center gap-2.5 w-full text-left px-4 pl-10 py-1.5 text-[14px] truncate transition-colors"
                     style={{
                       color: selectedNode?.id === node.id ? "var(--neo-fg)" : "var(--neo-fg-secondary)",
-                      background: selectedNode?.id === node.id ? "rgba(255,255,255,0.06)" : "transparent",
+                      background: selectedNode?.id === node.id ? "var(--neo-surface-hover)" : "transparent",
                     }}
-                    onMouseEnter={(e) => { if (selectedNode?.id !== node.id) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+                    onMouseEnter={(e) => { if (selectedNode?.id !== node.id) e.currentTarget.style.background = "var(--neo-surface-hover)"; }}
                     onMouseLeave={(e) => { if (selectedNode?.id !== node.id) e.currentTarget.style.background = "transparent"; }}
                   >
-                    <FileText size={11} style={{ color: "var(--neo-fg-faint)", flexShrink: 0 }} />
+                    <FileText size={14} style={{ color: "var(--neo-fg-faint)", flexShrink: 0 }} />
                     <span className="truncate">{node.title}</span>
                   </button>
                 ))}
@@ -180,7 +180,7 @@ export default function KnowledgePage() {
           })}
         </nav>
 
-        <div className="px-3 py-2 text-[10px]" style={{ borderTop: "1px solid var(--neo-border)", color: "var(--neo-fg-faint)" }}>
+        <div className="px-4 py-2.5 text-xs" style={{ borderTop: "1px solid var(--neo-border)", color: "var(--neo-fg-faint)" }}>
           {nodes.length} nodes
         </div>
       </aside>
