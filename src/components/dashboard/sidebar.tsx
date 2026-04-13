@@ -11,8 +11,9 @@ import {
   GitFork,
   Settings,
   LogOut,
-  ChevronsLeft,
-  ChevronsRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  HelpCircle,
 } from "lucide-react";
 
 const navItems = [
@@ -48,68 +49,94 @@ export function Sidebar() {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
+  const photoURL = user?.photoURL;
+
   return (
     <motion.aside
-      animate={{ width: collapsed ? 56 : 240 }}
+      animate={{ width: collapsed ? 56 : 220 }}
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-      className="flex flex-col border-r h-screen overflow-hidden"
+      className="flex flex-col h-screen overflow-hidden shrink-0"
       style={{
         background: "var(--neo-surface)",
-        borderColor: "var(--neo-border)",
+        borderRight: "1px solid var(--neo-border)",
       }}
     >
-      {/* Logo */}
+      {/* Logo + collapse toggle */}
       <div
-        className="flex h-14 items-center px-4 shrink-0"
+        className="flex items-center justify-between h-12 px-3 shrink-0"
         style={{ borderBottom: "1px solid var(--neo-border)" }}
       >
-        <Link href="/" className="flex items-center gap-2 overflow-hidden">
-          <div
-            className="h-7 w-7 rounded-lg shrink-0 flex items-center justify-center text-xs font-bold"
-            style={{ background: "var(--neo-accent)", color: "#fff" }}
-          >
-            N
-          </div>
-          <AnimatePresence>
-            {!collapsed && (
+        <Link href="/" className="flex items-center gap-2 overflow-hidden min-w-0">
+          <AnimatePresence mode="wait">
+            {!collapsed ? (
               <motion.div
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                className="flex flex-col overflow-hidden whitespace-nowrap"
+                key="full"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col leading-none"
               >
-                <span className="neo-heading text-sm">Neo</span>
-                <span className="neo-label" style={{ fontSize: 9, marginTop: -2 }}>
+                <span className="text-sm font-semibold" style={{ color: "var(--neo-fg)" }}>
+                  Neo
+                </span>
+                <span className="neo-label" style={{ fontSize: 8, marginTop: 1 }}>
                   by Nura Labs
                 </span>
               </motion.div>
+            ) : (
+              <motion.span
+                key="short"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-sm font-semibold"
+                style={{ color: "var(--neo-fg)" }}
+              >
+                N
+              </motion.span>
             )}
           </AnimatePresence>
         </Link>
+        <button
+          onClick={toggleCollapse}
+          className="p-1 rounded transition-colors shrink-0"
+          style={{ color: "var(--neo-fg-muted)" }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--neo-fg-secondary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--neo-fg-muted)")}
+        >
+          {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+        </button>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-2 space-y-0.5">
+      <nav className="flex-1 px-2 py-2 space-y-0.5">
         {navItems.map((item) => {
           const active = isActive(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors relative"
+              className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors"
               style={{
-                color: active ? "var(--neo-accent)" : "var(--neo-fg-secondary)",
-                background: active ? "var(--neo-accent-muted)" : "transparent",
+                color: active ? "var(--neo-fg)" : "var(--neo-fg-muted)",
+                background: active ? "rgba(255, 255, 255, 0.06)" : "transparent",
+                fontWeight: active ? 500 : 400,
               }}
               onMouseEnter={(e) => {
-                if (!active) e.currentTarget.style.background = "var(--neo-surface-hover)";
+                if (!active) {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.03)";
+                  e.currentTarget.style.color = "var(--neo-fg-secondary)";
+                }
               }}
               onMouseLeave={(e) => {
-                if (!active) e.currentTarget.style.background = "transparent";
+                if (!active) {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--neo-fg-muted)";
+                }
               }}
               title={collapsed ? item.label : undefined}
             >
-              <item.icon size={18} className="shrink-0" />
+              <item.icon size={16} className="shrink-0" />
               <AnimatePresence>
                 {!collapsed && (
                   <motion.span
@@ -127,54 +154,27 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* User section + collapse toggle */}
+      {/* Bottom section */}
       <div
-        className="p-2 space-y-1 shrink-0"
+        className="px-2 py-2 space-y-0.5 shrink-0"
         style={{ borderTop: "1px solid var(--neo-border)" }}
       >
-        {/* User info */}
-        {user && (
-          <div
-            className="flex items-center gap-3 rounded-md px-3 py-2 overflow-hidden"
-          >
-            <div
-              className="h-6 w-6 rounded-full shrink-0 flex items-center justify-center text-[10px] font-medium"
-              style={{ background: "var(--neo-surface2)", color: "var(--neo-fg-secondary)" }}
-            >
-              {(user.displayName ?? user.email ?? "U")[0].toUpperCase()}
-            </div>
-            <AnimatePresence>
-              {!collapsed && (
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="text-xs truncate"
-                  style={{ color: "var(--neo-fg-secondary)" }}
-                >
-                  {user.displayName ?? user.email}
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm w-full transition-colors"
+        {/* Support */}
+        <a
+          href="mailto:support@nura.sh"
+          className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors"
           style={{ color: "var(--neo-fg-muted)" }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--neo-surface-hover)";
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.03)";
             e.currentTarget.style.color = "var(--neo-fg-secondary)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = "transparent";
             e.currentTarget.style.color = "var(--neo-fg-muted)";
           }}
-          title={collapsed ? "Sign out" : undefined}
+          title={collapsed ? "Support" : undefined}
         >
-          <LogOut size={16} className="shrink-0" />
+          <HelpCircle size={16} className="shrink-0" />
           <AnimatePresence>
             {!collapsed && (
               <motion.span
@@ -183,33 +183,59 @@ export function Sidebar() {
                 exit={{ opacity: 0 }}
                 className="overflow-hidden whitespace-nowrap"
               >
-                Sign out
+                Support
               </motion.span>
             )}
           </AnimatePresence>
-        </button>
+        </a>
 
-        {/* Collapse toggle */}
-        <button
-          onClick={toggleCollapse}
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm w-full transition-colors"
-          style={{ color: "var(--neo-fg-muted)" }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--neo-surface-hover)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-          }}
-        >
-          {collapsed ? (
-            <ChevronsRight size={16} className="shrink-0" />
-          ) : (
-            <>
-              <ChevronsLeft size={16} className="shrink-0" />
-              <span className="overflow-hidden whitespace-nowrap">Collapse</span>
-            </>
-          )}
-        </button>
+        {/* User */}
+        {user && (
+          <div className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 overflow-hidden">
+            {photoURL ? (
+              <img
+                src={photoURL}
+                alt=""
+                className="h-5 w-5 rounded-full shrink-0"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div
+                className="h-5 w-5 rounded-full shrink-0 flex items-center justify-center text-[9px] font-medium"
+                style={{ background: "rgba(255, 255, 255, 0.08)", color: "var(--neo-fg-muted)" }}
+              >
+                {(user.displayName ?? user.email ?? "U")[0].toUpperCase()}
+              </div>
+            )}
+            <AnimatePresence>
+              {!collapsed && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex-1 min-w-0 flex items-center justify-between"
+                >
+                  <span
+                    className="text-[12px] truncate"
+                    style={{ color: "var(--neo-fg-secondary)" }}
+                  >
+                    {user.displayName ?? user.email}
+                  </span>
+                  <button
+                    onClick={handleLogout}
+                    className="p-0.5 rounded transition-colors shrink-0"
+                    style={{ color: "var(--neo-fg-muted)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--neo-fg)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--neo-fg-muted)")}
+                    title="Sign out"
+                  >
+                    <LogOut size={13} />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
     </motion.aside>
   );

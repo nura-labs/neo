@@ -55,14 +55,8 @@ export function LoginForm() {
     <div className="space-y-6">
       {/* Logo */}
       <div className="text-center space-y-1">
-        <div
-          className="mx-auto h-10 w-10 rounded-xl flex items-center justify-center text-sm font-bold mb-4"
-          style={{ background: "var(--neo-accent)", color: "#fff" }}
-        >
-          N
-        </div>
-        <h1 className="neo-heading text-2xl">Sign in</h1>
-        <p className="neo-text-muted text-sm">Access your knowledge graph</p>
+        <h1 className="neo-heading text-2xl">Neo</h1>
+        <p className="neo-text-muted text-sm">Sign in to your knowledge graph</p>
       </div>
 
       {/* Card */}

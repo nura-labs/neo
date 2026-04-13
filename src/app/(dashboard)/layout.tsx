@@ -25,15 +25,7 @@ export default function DashboardLayout({
         className="flex h-screen items-center justify-center"
         style={{ background: "var(--neo-bg)" }}
       >
-        <div className="flex items-center gap-3">
-          <div
-            className="h-8 w-8 rounded-lg flex items-center justify-center text-sm font-bold"
-            style={{ background: "var(--neo-accent)", color: "#fff" }}
-          >
-            N
-          </div>
-          <span className="neo-text-muted text-sm">Loading...</span>
-        </div>
+        <span className="neo-text-muted text-sm">Loading...</span>
       </div>
     );
   }
