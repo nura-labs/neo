@@ -4,11 +4,11 @@
 /* ─── Neo Design System (Nura Brand) ────────────────────── */
 
 :root {
-  /* Background layers */
-  --neo-bg: #06070b;
-  --neo-surface: #0d0f15;
-  --neo-surface2: #11141c;
-  --neo-surface-hover: #161a24;
+  /* Background layers — warm dark, not pure black */
+  --neo-bg: #1a1b1e;
+  --neo-surface: #222326;
+  --neo-surface2: #2a2b2f;
+  --neo-surface-hover: #303136;
 
   /* Text hierarchy (opacity-based) */
   --neo-fg: #ece9e6;
