@@ -60,6 +60,8 @@ export function KnowledgeGraph({
     apiFetch<GraphData>("/api/graph").then((res) => {
       if (res.ok) setData(res.data);
       setLoading(false);
+      // Zoom to fit after short delay for initial render
+      setTimeout(() => fgRef.current?.zoomToFit(200, 40), 500);
     });
   }, []);
 
@@ -121,39 +123,36 @@ export function KnowledgeGraph({
       const dimmed = hasActive && !isConnected;
       const isPinned = n.fx !== undefined;
 
-      const size = isActive ? 5 : 3.5;
+      const size = isActive ? 7 : 5;
       const nodeColor = getNodeColor(n.type);
 
       // Glow for active node
       if (isActive) {
         ctx.beginPath();
-        ctx.arc(x, y, size + 6, 0, 2 * Math.PI);
-        ctx.fillStyle = `${nodeColor}20`;
+        ctx.arc(x, y, size + 8, 0, 2 * Math.PI);
+        ctx.fillStyle = `${nodeColor}18`;
         ctx.fill();
       }
 
-      // Pin indicator ring
-      if (isPinned && !isActive) {
-        ctx.beginPath();
-        ctx.arc(x, y, size + 2, 0, 2 * Math.PI);
-        ctx.strokeStyle = `${nodeColor}40`;
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
-      }
-
-      // Node circle
+      // Node circle — filled with border
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
       if (dimmed) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
       } else if (isActive) {
         ctx.fillStyle = nodeColor;
+        ctx.strokeStyle = "#fff";
       } else if (isConnected && hasActive) {
-        ctx.fillStyle = `${nodeColor}cc`;
+        ctx.fillStyle = `${nodeColor}bb`;
+        ctx.strokeStyle = `${nodeColor}dd`;
       } else {
-        ctx.fillStyle = `${nodeColor}88`;
+        ctx.fillStyle = `${nodeColor}66`;
+        ctx.strokeStyle = `${nodeColor}99`;
       }
       ctx.fill();
+      ctx.lineWidth = dimmed ? 0.5 : 1;
+      ctx.stroke();
 
       // Label
       const fontSize = Math.max(11 / globalScale, 1.5);
@@ -236,7 +235,7 @@ export function KnowledgeGraph({
           nodeCanvasObject={paintNode}
           nodeCanvasObjectMode={() => "replace"}
           linkColor={(link) => {
-            if (!hasActive) return "rgba(255, 255, 255, 0.12)";
+            if (!hasActive) return "rgba(255, 255, 255, 0.18)";
             const sId = typeof (link as GraphLink).source === "string"
               ? (link as GraphLink).source as string
               : ((link as GraphLink).source as GraphNode).id;
@@ -244,12 +243,12 @@ export function KnowledgeGraph({
               ? (link as GraphLink).target as string
               : ((link as GraphLink).target as GraphNode).id;
             if (highlighted.has(sId) && highlighted.has(tId)) {
-              return "rgba(232, 112, 64, 0.5)";
+              return "rgba(255, 255, 255, 0.5)";
             }
-            return "rgba(255, 255, 255, 0.03)";
+            return "rgba(255, 255, 255, 0.04)";
           }}
           linkWidth={(link) => {
-            if (!hasActive) return 0.5;
+            if (!hasActive) return 0.6;
             const sId = typeof (link as GraphLink).source === "string"
               ? (link as GraphLink).source as string
               : ((link as GraphLink).source as GraphNode).id;
@@ -273,7 +272,7 @@ export function KnowledgeGraph({
           cooldownTicks={300}
           /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
           ref={fgRef as any}
-          onEngineStop={() => fgRef.current?.zoomToFit(400, 60)}
+          onEngineStop={() => fgRef.current?.zoomToFit(300, 40)}
           /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
           onRenderFramePost={() => {
             const fg = fgRef.current as any;

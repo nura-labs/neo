@@ -1,31 +1,33 @@
+// Pastel palette — grouped by category, softer and cohesive
+
 export const nodeTypeColors: Record<string, string> = {
-  // Knowledge types
-  pattern: "#60a5fa",       // blue
-  convention: "#4ade80",    // green
-  architecture: "#f9a8d4",  // pink
-  decision: "#fbbf24",      // amber
-  concept: "#67e8f9",       // cyan
-  workflow: "#c084fc",      // purple
-  snippet: "#a3e635",       // lime
+  // Knowledge types → soft blue family
+  pattern: "#7da0ca",
+  convention: "#8badc7",
+  architecture: "#6e98bf",
+  decision: "#9bb4cf",
+  concept: "#7da8c4",
+  workflow: "#88b0c9",
+  snippet: "#94b8cd",
 
-  // Structure types
-  module: "#a78bfa",        // violet
-  api: "#38bdf8",           // sky
-  service: "#2dd4bf",       // teal
-  config: "#d4d4d8",        // zinc
+  // Structure types → soft lavender
+  module: "#a094c4",
+  api: "#9a8dbe",
+  service: "#a89dc8",
+  config: "#b0a5cb",
 
-  // Entity types
-  person: "#f472b6",        // pink
-  project: "#34d399",       // emerald
-  team: "#fb7185",          // rose
-  tool: "#818cf8",          // indigo
+  // Entity types → soft teal/green
+  person: "#7ebba5",
+  project: "#72b59e",
+  team: "#85c0ab",
+  tool: "#6daf97",
 
-  // Reference types
-  reference: "#fb923c",     // orange
-  research: "#fcd34d",      // yellow
-  note: "#9ca3af",          // gray
+  // Reference types → warm neutral
+  reference: "#bfb5a3",
+  research: "#c4baa8",
+  note: "#9e978c",
 };
 
 export function getNodeColor(type: string): string {
-  return nodeTypeColors[type] ?? "#9ca3af";
+  return nodeTypeColors[type] ?? "#9e978c";
 }
