@@ -190,16 +190,16 @@ export default function KnowledgePage() {
         <div className="flex flex-1 overflow-hidden">
           {/* Content */}
           <main className="flex-1 overflow-y-auto">
-            <div className="max-w-2xl mx-auto px-8 py-10">
+            <div className="max-w-3xl mx-auto px-10 py-12">
               {/* Title */}
-              <div className="mb-8">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: nodeTypeColors[selectedNode.type] }} />
-                  <span className="text-xs font-medium" style={{ color: nodeTypeColors[selectedNode.type] }}>{selectedNode.type}</span>
+              <div className="mb-10">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: nodeTypeColors[selectedNode.type] }} />
+                  <span className="text-sm font-medium" style={{ color: nodeTypeColors[selectedNode.type] }}>{selectedNode.type}</span>
                 </div>
-                <h1 className="neo-heading text-2xl leading-tight">{selectedNode.title}</h1>
+                <h1 className="neo-heading text-3xl leading-tight">{selectedNode.title}</h1>
                 {selectedNode.source && (
-                  <p className="text-xs mt-2" style={{ color: "var(--neo-fg-muted)" }}>{selectedNode.source}</p>
+                  <p className="text-sm mt-3" style={{ color: "var(--neo-fg-muted)" }}>{selectedNode.source}</p>
                 )}
               </div>
 
@@ -231,17 +231,17 @@ export default function KnowledgePage() {
               ) : (
                 <div>
                   <article
-                    className="prose prose-invert max-w-none
+                    className="prose prose-invert prose-base max-w-none
                       prose-headings:font-semibold prose-headings:tracking-tight
-                      prose-h1:text-xl prose-h1:mt-8 prose-h1:mb-4
-                      prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-3
-                      prose-h3:text-base prose-h3:mt-6 prose-h3:mb-2
-                      prose-p:text-sm prose-p:leading-[1.8] prose-p:mb-4
-                      prose-li:text-sm prose-li:leading-[1.7]
-                      prose-ul:my-3 prose-ol:my-3
+                      prose-h1:text-2xl prose-h1:mt-10 prose-h1:mb-5
+                      prose-h2:text-xl prose-h2:mt-10 prose-h2:mb-4
+                      prose-h3:text-lg prose-h3:mt-8 prose-h3:mb-3
+                      prose-p:text-[15px] prose-p:leading-[1.85] prose-p:mb-5
+                      prose-li:text-[15px] prose-li:leading-[1.75]
+                      prose-ul:my-4 prose-ol:my-4
                       prose-strong:font-semibold
-                      prose-code:text-xs
-                      prose-pre:my-4"
+                      prose-code:text-[13px]
+                      prose-pre:my-5"
                     style={{ color: "var(--neo-fg-secondary)" }}
                   >
                     <ReactMarkdown
@@ -294,23 +294,23 @@ export default function KnowledgePage() {
 
           {/* Right metadata panel */}
           <aside
-            className="w-[260px] shrink-0 overflow-y-auto p-5 space-y-6 hidden lg:block"
+            className="w-[280px] shrink-0 overflow-y-auto p-6 space-y-7 hidden lg:block"
             style={{ borderLeft: "1px solid var(--neo-border)" }}
           >
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: nodeTypeColors[selectedNode.type] }} />
+            <div className="space-y-4">
+              <div className="flex items-center gap-2.5">
+                <span className="h-3.5 w-3.5 rounded-full" style={{ backgroundColor: nodeTypeColors[selectedNode.type] }} />
                 <span className="text-sm font-medium" style={{ color: "var(--neo-fg)" }}>{selectedNode.type}</span>
               </div>
               {selectedNode.source && (
-                <div className="flex items-center gap-2">
-                  <GitFork size={13} style={{ color: "var(--neo-fg-muted)" }} />
-                  <span className="text-xs" style={{ color: "var(--neo-fg-secondary)" }}>{selectedNode.source}</span>
+                <div className="flex items-center gap-2.5">
+                  <GitFork size={14} style={{ color: "var(--neo-fg-muted)" }} />
+                  <span className="text-sm" style={{ color: "var(--neo-fg-secondary)" }}>{selectedNode.source}</span>
                 </div>
               )}
-              <div className="flex items-center gap-2">
-                <Clock size={13} style={{ color: "var(--neo-fg-muted)" }} />
-                <span className="text-xs" style={{ color: "var(--neo-fg-secondary)" }}>{formatDate(selectedNode.updatedAt)}</span>
+              <div className="flex items-center gap-2.5">
+                <Clock size={14} style={{ color: "var(--neo-fg-muted)" }} />
+                <span className="text-sm" style={{ color: "var(--neo-fg-secondary)" }}>{formatDate(selectedNode.updatedAt)}</span>
               </div>
             </div>
 
@@ -335,16 +335,16 @@ export default function KnowledgePage() {
                     <button
                       key={`${r.id}-${r.relationship}-${r.direction}`}
                       onClick={() => { const t = nodes.find((n) => n.id === r.id); if (t) selectNode(t); }}
-                      className="flex items-center gap-2 w-full rounded-md px-2.5 py-1.5 text-left transition-colors"
+                      className="flex items-center gap-2.5 w-full rounded-md px-3 py-2 text-left transition-colors"
                       onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                     >
                       {r.direction === "outgoing"
-                        ? <ArrowRight size={11} style={{ color: "var(--neo-fg-muted)", flexShrink: 0 }} />
-                        : <ArrowLeft size={11} style={{ color: "var(--neo-fg-muted)", flexShrink: 0 }} />
+                        ? <ArrowRight size={13} style={{ color: "var(--neo-fg-muted)", flexShrink: 0 }} />
+                        : <ArrowLeft size={13} style={{ color: "var(--neo-fg-muted)", flexShrink: 0 }} />
                       }
-                      <span className="text-xs truncate flex-1" style={{ color: "var(--neo-fg)" }}>{r.title}</span>
-                      <span className="text-[10px] shrink-0" style={{ color: "var(--neo-fg-faint)" }}>{r.relationship}</span>
+                      <span className="text-sm truncate flex-1" style={{ color: "var(--neo-fg)" }}>{r.title}</span>
+                      <span className="text-[11px] shrink-0" style={{ color: "var(--neo-fg-faint)" }}>{r.relationship}</span>
                     </button>
                   ))}
                 </div>
