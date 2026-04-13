@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useTheme } from "next-themes";
 import { apiFetch } from "@/lib/api";
 import { getNodeColor } from "@/lib/graph/colors";
 import { forceX, forceY, forceManyBody } from "d3-force";
@@ -52,6 +53,8 @@ export function KnowledgeGraph({
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(true);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<{ zoomToFit: (ms?: number, px?: number) => void } | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -134,21 +137,21 @@ export function KnowledgeGraph({
         ctx.fill();
       }
 
-      // Node circle — solid opaque fill, no transparency
+      // Node circle — solid opaque fill
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
       if (dimmed) {
-        ctx.fillStyle = "#1a181d";
-        ctx.strokeStyle = "#252328";
+        ctx.fillStyle = isLight ? "#e8e8e8" : "#1a181d";
+        ctx.strokeStyle = isLight ? "#d0d0d0" : "#252328";
       } else if (isActive) {
         ctx.fillStyle = nodeColor;
-        ctx.strokeStyle = "#fff";
+        ctx.strokeStyle = isLight ? "#333" : "#fff";
       } else if (isConnected && hasActive) {
         ctx.fillStyle = nodeColor;
-        ctx.strokeStyle = `${nodeColor}`;
+        ctx.strokeStyle = nodeColor;
       } else {
         ctx.fillStyle = nodeColor;
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.strokeStyle = isLight ? "rgba(0, 0, 0, 0.10)" : "rgba(255, 255, 255, 0.15)";
       }
       ctx.fill();
       ctx.lineWidth = isActive ? 1.5 : 0.5;
@@ -163,11 +166,11 @@ export function KnowledgeGraph({
         ctx.textBaseline = "top";
 
         if (isActive) {
-          ctx.fillStyle = "rgba(236, 233, 230, 0.95)";
+          ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.90)" : "rgba(236, 233, 230, 0.95)";
         } else if (isConnected && hasActive) {
-          ctx.fillStyle = "rgba(236, 233, 230, 0.7)";
+          ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.65)" : "rgba(236, 233, 230, 0.7)";
         } else {
-          ctx.fillStyle = "rgba(236, 233, 230, 0.45)";
+          ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.40)" : "rgba(236, 233, 230, 0.45)";
         }
 
         let label = n.name;
@@ -175,7 +178,7 @@ export function KnowledgeGraph({
         ctx.fillText(label, x, y + size + 2);
       }
     },
-    [activeNode, highlighted, hasActive]
+    [activeNode, highlighted, hasActive, isLight]
   );
 
   const handleNodeClick = useCallback(
@@ -235,7 +238,7 @@ export function KnowledgeGraph({
           nodeCanvasObject={paintNode}
           nodeCanvasObjectMode={() => "replace"}
           linkColor={(link) => {
-            if (!hasActive) return "rgba(255, 255, 255, 0.18)";
+            if (!hasActive) return isLight ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.18)";
             const sId = typeof (link as GraphLink).source === "string"
               ? (link as GraphLink).source as string
               : ((link as GraphLink).source as GraphNode).id;
@@ -243,9 +246,9 @@ export function KnowledgeGraph({
               ? (link as GraphLink).target as string
               : ((link as GraphLink).target as GraphNode).id;
             if (highlighted.has(sId) && highlighted.has(tId)) {
-              return "rgba(255, 255, 255, 0.5)";
+              return isLight ? "rgba(0, 0, 0, 0.40)" : "rgba(255, 255, 255, 0.5)";
             }
-            return "rgba(255, 255, 255, 0.04)";
+            return isLight ? "rgba(0, 0, 0, 0.03)" : "rgba(255, 255, 255, 0.04)";
           }}
           linkWidth={(link) => {
             if (!hasActive) return 0.6;

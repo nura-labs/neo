@@ -105,7 +105,6 @@ export function Sidebar() {
                 color: active ? "var(--neo-fg)" : "var(--neo-fg-muted)",
                 background: active ? "var(--neo-surface-hover)" : "transparent",
                 fontWeight: active ? 500 : 400,
-                borderLeft: active ? "2px solid var(--neo-accent)" : "2px solid transparent",
               }}
               onMouseEnter={(e) => {
                 if (!active) {
@@ -155,9 +154,9 @@ export function Sidebar() {
 
         {/* User + theme */}
         {user && (
-          <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 overflow-hidden">
+          <div className={`flex items-center gap-3 rounded-lg py-2.5 overflow-hidden ${collapsed ? "justify-center px-0" : "px-3"}`}>
             {photoURL ? (
-              <img src={photoURL} alt="" className="h-8 w-8 rounded-full shrink-0" referrerPolicy="no-referrer" />
+              <img src={photoURL} alt="" className="h-8 w-8 rounded-full shrink-0 object-cover" referrerPolicy="no-referrer" />
             ) : (
               <div className="h-8 w-8 rounded-full shrink-0 flex items-center justify-center text-sm font-medium" style={{ background: "var(--neo-surface2)", color: "var(--neo-fg-muted)" }}>
                 {(user.displayName ?? user.email ?? "U")[0].toUpperCase()}
