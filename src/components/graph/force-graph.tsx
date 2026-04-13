@@ -1,16 +1,16 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getNodeColor } from "@/lib/graph/colors";
 import { forceX, forceY, forceManyBody } from "d3-force";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
   ssr: false,
 });
 
-interface GraphNode {
+export interface GraphNode {
   id: string;
   name: string;
   type: string;
@@ -18,28 +18,43 @@ interface GraphNode {
   val: number;
   x?: number;
   y?: number;
+  fx?: number | undefined;
+  fy?: number | undefined;
+  [key: string]: unknown;
 }
 
-interface GraphLink {
+export interface GraphLink {
   source: string | GraphNode;
   target: string | GraphNode;
   name: string;
 }
 
-interface GraphData {
+export interface GraphData {
   nodes: GraphNode[];
   links: GraphLink[];
 }
 
-export function KnowledgeGraph() {
+interface KnowledgeGraphProps {
+  onNodeSelect?: (nodeId: string | null) => void;
+  selectedNodeId?: string | null;
+  width?: number;
+  height?: number;
+  typeFilter?: Set<string> | null;
+}
+
+export function KnowledgeGraph({
+  onNodeSelect,
+  selectedNodeId,
+  width,
+  height,
+  typeFilter,
+}: KnowledgeGraphProps) {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(true);
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<{ zoomToFit: (ms?: number, px?: number) => void } | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  const router = useRouter();
 
   useEffect(() => {
     apiFetch<GraphData>("/api/graph").then((res) => {
@@ -49,30 +64,39 @@ export function KnowledgeGraph() {
   }, []);
 
   useEffect(() => {
+    if (width && height) {
+      setDimensions({ width, height });
+      return;
+    }
     if (!containerRef.current) return;
     const el = containerRef.current;
-
     function updateSize() {
-      setDimensions({
-        width: el.clientWidth,
-        height: el.clientHeight,
-      });
+      setDimensions({ width: el.clientWidth, height: el.clientHeight });
     }
-
     updateSize();
-
     const ro = new ResizeObserver(updateSize);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [width, height]);
 
-  // Find connected nodes for highlight
+  // Filter nodes by type
+  const filteredData = typeFilter && typeFilter.size > 0
+    ? {
+        nodes: data.nodes.filter((n) => typeFilter.has(n.type)),
+        links: data.links.filter((l) => {
+          const sId = typeof l.source === "string" ? l.source : l.source.id;
+          const tId = typeof l.target === "string" ? l.target : l.target.id;
+          const nodeIds = new Set(data.nodes.filter((n) => typeFilter.has(n.type)).map((n) => n.id));
+          return nodeIds.has(sId) && nodeIds.has(tId);
+        }),
+      }
+    : data;
+
   const connectedNodes = useCallback(
     (nodeId: string | null) => {
       if (!nodeId) return new Set<string>();
-      const connected = new Set<string>();
-      connected.add(nodeId);
-      data.links.forEach((link) => {
+      const connected = new Set<string>([nodeId]);
+      filteredData.links.forEach((link) => {
         const sourceId = typeof link.source === "string" ? link.source : link.source.id;
         const targetId = typeof link.target === "string" ? link.target : link.target.id;
         if (sourceId === nodeId) connected.add(targetId);
@@ -80,10 +104,10 @@ export function KnowledgeGraph() {
       });
       return connected;
     },
-    [data.links]
+    [filteredData.links]
   );
 
-  const activeNode = selectedNode || hoveredNode;
+  const activeNode = selectedNodeId || hoveredNode;
   const highlighted = connectedNodes(activeNode);
   const hasActive = activeNode !== null;
 
@@ -95,16 +119,26 @@ export function KnowledgeGraph() {
       const isActive = n.id === activeNode;
       const isConnected = highlighted.has(n.id);
       const dimmed = hasActive && !isConnected;
+      const isPinned = n.fx !== undefined;
 
-      // Node size — uniform, small
       const size = isActive ? 5 : 3.5;
+      const nodeColor = getNodeColor(n.type);
 
       // Glow for active node
       if (isActive) {
         ctx.beginPath();
         ctx.arc(x, y, size + 6, 0, 2 * Math.PI);
-        ctx.fillStyle = "rgba(120, 140, 255, 0.12)";
+        ctx.fillStyle = `${nodeColor}20`;
         ctx.fill();
+      }
+
+      // Pin indicator ring
+      if (isPinned && !isActive) {
+        ctx.beginPath();
+        ctx.arc(x, y, size + 2, 0, 2 * Math.PI);
+        ctx.strokeStyle = `${nodeColor}40`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
       }
 
       // Node circle
@@ -113,11 +147,11 @@ export function KnowledgeGraph() {
       if (dimmed) {
         ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
       } else if (isActive) {
-        ctx.fillStyle = "#fff";
+        ctx.fillStyle = nodeColor;
       } else if (isConnected && hasActive) {
-        ctx.fillStyle = "rgba(160, 180, 255, 0.8)";
+        ctx.fillStyle = `${nodeColor}cc`;
       } else {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+        ctx.fillStyle = `${nodeColor}88`;
       }
       ctx.fill();
 
@@ -128,17 +162,17 @@ export function KnowledgeGraph() {
         ctx.font = `${isActive ? "600 " : ""}${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillStyle = isActive
-          ? "rgba(255, 255, 255, 0.9)"
-          : isConnected && hasActive
-            ? "rgba(255, 255, 255, 0.7)"
-            : "rgba(255, 255, 255, 0.4)";
 
-        // Truncate long names
-        let label = n.name;
-        if (label.length > 30 && !isActive) {
-          label = label.substring(0, 28) + "...";
+        if (isActive) {
+          ctx.fillStyle = "rgba(236, 233, 230, 0.95)";
+        } else if (isConnected && hasActive) {
+          ctx.fillStyle = "rgba(236, 233, 230, 0.7)";
+        } else {
+          ctx.fillStyle = "rgba(236, 233, 230, 0.45)";
         }
+
+        let label = n.name;
+        if (label.length > 30 && !isActive) label = label.substring(0, 28) + "...";
         ctx.fillText(label, x, y + size + 2);
       }
     },
@@ -148,97 +182,114 @@ export function KnowledgeGraph() {
   const handleNodeClick = useCallback(
     (node: object) => {
       const n = node as GraphNode;
-      if (selectedNode === n.id) {
-        // Double click — navigate to detail
-        router.push(`/knowledge/${n.id}`);
-      } else {
-        setSelectedNode(n.id);
-      }
+      onNodeSelect?.(n.id);
     },
-    [selectedNode, router]
+    [onNodeSelect]
   );
 
   const handleBackgroundClick = useCallback(() => {
-    setSelectedNode(null);
+    onNodeSelect?.(null);
+    // Unpin all nodes
+    data.nodes.forEach((n) => {
+      n.fx = undefined;
+      n.fy = undefined;
+    });
+  }, [onNodeSelect, data.nodes]);
+
+  const handleNodeDragEnd = useCallback((node: object) => {
+    const n = node as GraphNode;
+    // Pin node where it was dropped
+    n.fx = n.x;
+    n.fy = n.y;
   }, []);
 
   if (loading) {
     return (
-      <div ref={containerRef} className="h-full w-full flex items-center justify-center text-neutral-500 text-sm">
-        Loading graph...
+      <div ref={containerRef} className="h-full w-full flex items-center justify-center">
+        <span className="neo-text-muted text-sm">Loading graph...</span>
       </div>
     );
   }
 
-  if (data.nodes.length === 0) {
+  if (filteredData.nodes.length === 0) {
     return (
-      <div ref={containerRef} className="h-full w-full flex items-center justify-center text-neutral-500 text-sm">
-        No knowledge nodes yet. Install the Neo skill and index a project to see your graph.
+      <div ref={containerRef} className="h-full w-full flex items-center justify-center">
+        <span className="neo-text-muted text-sm">
+          {typeFilter && typeFilter.size > 0
+            ? "No nodes match the selected filters"
+            : "No knowledge nodes yet"}
+        </span>
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="h-full w-full relative">
-      {dimensions.width > 0 && dimensions.height > 0 && <ForceGraph2D
-        graphData={data}
-        width={dimensions.width}
-        height={dimensions.height}
-        backgroundColor="#1a1a2e"
-        nodeRelSize={1}
-        nodeVal={() => 1}
-        nodeCanvasObject={paintNode}
-        nodeCanvasObjectMode={() => "replace"}
-        linkColor={(link) => {
-          if (!hasActive) return "rgba(255, 255, 255, 0.35)";
-          const sourceId = typeof (link as GraphLink).source === "string" ? (link as GraphLink).source as string : ((link as GraphLink).source as GraphNode).id;
-          const targetId = typeof (link as GraphLink).target === "string" ? (link as GraphLink).target as string : ((link as GraphLink).target as GraphNode).id;
-          if (highlighted.has(sourceId) && highlighted.has(targetId)) {
-            return "rgba(140, 160, 255, 0.7)";
+    <div ref={containerRef} className="h-full w-full">
+      {dimensions.width > 0 && dimensions.height > 0 && (
+        <ForceGraph2D
+          graphData={filteredData}
+          width={dimensions.width}
+          height={dimensions.height}
+          backgroundColor="transparent"
+          nodeRelSize={1}
+          nodeVal={() => 1}
+          nodeCanvasObject={paintNode}
+          nodeCanvasObjectMode={() => "replace"}
+          linkColor={(link) => {
+            if (!hasActive) return "rgba(255, 255, 255, 0.12)";
+            const sId = typeof (link as GraphLink).source === "string"
+              ? (link as GraphLink).source as string
+              : ((link as GraphLink).source as GraphNode).id;
+            const tId = typeof (link as GraphLink).target === "string"
+              ? (link as GraphLink).target as string
+              : ((link as GraphLink).target as GraphNode).id;
+            if (highlighted.has(sId) && highlighted.has(tId)) {
+              return "rgba(232, 112, 64, 0.5)";
+            }
+            return "rgba(255, 255, 255, 0.03)";
+          }}
+          linkWidth={(link) => {
+            if (!hasActive) return 0.5;
+            const sId = typeof (link as GraphLink).source === "string"
+              ? (link as GraphLink).source as string
+              : ((link as GraphLink).source as GraphNode).id;
+            const tId = typeof (link as GraphLink).target === "string"
+              ? (link as GraphLink).target as string
+              : ((link as GraphLink).target as GraphNode).id;
+            if (highlighted.has(sId) && highlighted.has(tId)) return 1.5;
+            return 0.2;
+          }}
+          linkDirectionalArrowLength={0}
+          linkDirectionalParticles={0}
+          onNodeClick={handleNodeClick}
+          onNodeHover={(node) =>
+            setHoveredNode(node ? ((node as GraphNode).id ?? null) : null)
           }
-          return "rgba(255, 255, 255, 0.06)";
-        }}
-        linkWidth={(link) => {
-          if (!hasActive) return 0.8;
-          const sourceId = typeof (link as GraphLink).source === "string" ? (link as GraphLink).source as string : ((link as GraphLink).source as GraphNode).id;
-          const targetId = typeof (link as GraphLink).target === "string" ? (link as GraphLink).target as string : ((link as GraphLink).target as GraphNode).id;
-          if (highlighted.has(sourceId) && highlighted.has(targetId)) return 2;
-          return 0.2;
-        }}
-        linkDirectionalArrowLength={0}
-        linkDirectionalParticles={0}
-        onNodeClick={handleNodeClick}
-        onNodeHover={(node) =>
-          setHoveredNode(node ? ((node as GraphNode).id ?? null) : null)
-        }
-        onBackgroundClick={handleBackgroundClick}
-        d3AlphaDecay={0.02}
-        d3VelocityDecay={0.2}
-        warmupTicks={100}
-        cooldownTicks={300}
-        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-        ref={fgRef as any}
-        onEngineStop={() => {
-          if (fgRef.current) {
-            fgRef.current.zoomToFit(400, 40);
-          }
-        }}
-        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-        onRenderFramePost={(_ctx: any, _globalScale: any) => {
-          // Configure forces once after first render
-          const fg = fgRef.current as any;
-          if (fg && !fg.__forcesConfigured) {
-            fg.d3Force("charge", forceManyBody().strength(-30).distanceMax(150));
-            fg.d3Force("centerX", forceX(0).strength(0.08));
-            fg.d3Force("centerY", forceY(0).strength(0.08));
-            fg.__forcesConfigured = true;
-            fg.d3ReheatSimulation();
-          }
-        }}
-        enableZoomInteraction={true}
-        enablePanInteraction={true}
-        enableNodeDrag={true}
-      />}
+          onBackgroundClick={handleBackgroundClick}
+          onNodeDragEnd={handleNodeDragEnd}
+          d3AlphaDecay={0.02}
+          d3VelocityDecay={0.25}
+          warmupTicks={100}
+          cooldownTicks={300}
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+          ref={fgRef as any}
+          onEngineStop={() => fgRef.current?.zoomToFit(400, 60)}
+          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+          onRenderFramePost={() => {
+            const fg = fgRef.current as any;
+            if (fg && !fg.__forcesConfigured) {
+              fg.d3Force("charge", forceManyBody().strength(-40).distanceMax(200));
+              fg.d3Force("centerX", forceX(0).strength(0.06));
+              fg.d3Force("centerY", forceY(0).strength(0.06));
+              fg.__forcesConfigured = true;
+              fg.d3ReheatSimulation();
+            }
+          }}
+          enableZoomInteraction={true}
+          enablePanInteraction={true}
+          enableNodeDrag={true}
+        />
+      )}
     </div>
   );
 }
