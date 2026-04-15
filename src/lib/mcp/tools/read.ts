@@ -4,7 +4,7 @@ import {
   getOverview,
   searchNodes,
   hybridSearch,
-  getNodeById,
+  getNodeBySlug,
   getRelatedNodes,
 } from "@/lib/db/queries";
 import { generateEmbedding } from "@/lib/knowledge/embeddings";
@@ -91,11 +91,11 @@ export function registerReadTools(server: McpServer) {
 
   server.tool(
     "get_node",
-    "Get the full content of a specific knowledge node by its ID",
-    { id: z.string().uuid().describe("Knowledge node ID") },
-    async ({ id }, { authInfo }) => {
+    "Get the full content of a specific knowledge node by its slug",
+    { slug: z.string().describe("Knowledge node slug") },
+    async ({ slug }, { authInfo }) => {
       const userId = authInfo?.extra?.userId as string;
-      const node = await getNodeById(id, userId);
+      const node = await getNodeBySlug(slug, userId);
 
       if (!node) {
         return {
@@ -104,7 +104,7 @@ export function registerReadTools(server: McpServer) {
         };
       }
 
-      const related = await getRelatedNodes(id, userId);
+      const related = await getRelatedNodes(node.id, userId);
       const relatedText =
         related.length > 0
           ? `\n\n## Related\n${related.map((r) => `- ${r.direction === "outgoing" ? "→" : "←"} **${r.node.title}** (${r.edge.relationship}) [slug: ${r.node.slug}]`).join("\n")}`
@@ -125,12 +125,21 @@ export function registerReadTools(server: McpServer) {
     "get_related",
     "Get all nodes related to a specific node, optionally filtered by relationship type",
     {
-      id: z.string().uuid().describe("Knowledge node ID"),
+      slug: z.string().describe("Knowledge node slug"),
       relationship: z.string().optional().describe("Filter by relationship type"),
     },
-    async ({ id, relationship }, { authInfo }) => {
+    async ({ slug, relationship }, { authInfo }) => {
       const userId = authInfo?.extra?.userId as string;
-      const related = await getRelatedNodes(id, userId, { relationship });
+      const node = await getNodeBySlug(slug, userId);
+
+      if (!node) {
+        return {
+          content: [{ type: "text" as const, text: "Node not found" }],
+          isError: true,
+        };
+      }
+
+      const related = await getRelatedNodes(node.id, userId, { relationship });
 
       if (related.length === 0) {
         return {
