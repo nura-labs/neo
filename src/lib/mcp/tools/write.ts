@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createNode, updateNode, deleteNode, getNodeBySlug, createEdge } from "@/lib/db/queries";
+import { createNode, updateNode, getNodeBySlug, createEdge } from "@/lib/db/queries";
 import { knowledgeNodeTypes, edgeRelationships } from "@/lib/validators/knowledge";
 import { generateSlug } from "@/lib/utils/slugify";
 
@@ -132,14 +132,22 @@ export function registerWriteTools(server: McpServer) {
     "update_knowledge",
     "Update an existing knowledge node. Use [[wikilinks]] in content to auto-create connections.",
     {
-      id: z.string().uuid().describe("ID of the node to update"),
+      slug: z.string().describe("Slug of the node to update"),
       title: z.string().optional().describe("New title"),
       content: z.string().optional().describe("New content (supports [[wikilinks]])"),
       type: z.enum(knowledgeNodeTypes).optional().describe("New type"),
       tags: z.array(z.string()).optional().describe("New tags (replaces existing)"),
     },
-    async ({ id, title, content, type, tags }, { authInfo }) => {
+    async ({ slug, title, content, type, tags }, { authInfo }) => {
       const userId = authInfo?.extra?.userId as string;
+
+      const existing = await getNodeBySlug(slug, userId);
+      if (!existing) {
+        return {
+          content: [{ type: "text" as const, text: "Node not found" }],
+          isError: true,
+        };
+      }
 
       const updates: Record<string, unknown> = {};
       if (title !== undefined) updates.title = title;
@@ -147,11 +155,11 @@ export function registerWriteTools(server: McpServer) {
       if (type !== undefined) updates.type = type;
       if (tags !== undefined) updates.tags = tags;
 
-      const node = await updateNode(id, userId, updates);
+      const node = await updateNode(existing.id, userId, updates);
 
       if (!node) {
         return {
-          content: [{ type: "text" as const, text: "Node not found" }],
+          content: [{ type: "text" as const, text: "Failed to update node" }],
           isError: true,
         };
       }
@@ -162,31 +170,6 @@ export function registerWriteTools(server: McpServer) {
             type: "text" as const,
             text: `Updated node **${node.title}** (${node.slug})`,
           },
-        ],
-      };
-    }
-  );
-
-  server.tool(
-    "delete_knowledge",
-    "Delete a knowledge node and all its edges",
-    {
-      id: z.string().uuid().describe("ID of the node to delete"),
-    },
-    async ({ id }, { authInfo }) => {
-      const userId = authInfo?.extra?.userId as string;
-      const deleted = await deleteNode(id, userId);
-
-      if (!deleted) {
-        return {
-          content: [{ type: "text" as const, text: "Node not found" }],
-          isError: true,
-        };
-      }
-
-      return {
-        content: [
-          { type: "text" as const, text: `Deleted node ${id} and all its edges` },
         ],
       };
     }
