@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/queries";
 import { generateEmbedding } from "@/lib/knowledge/embeddings";
 import { edgeRelationships, knowledgeNodeTypes } from "@/lib/validators/knowledge";
+import { requireMcpAccess } from "@/lib/mcp/permissions";
 
 export function registerReadTools(server: McpServer) {
   server.tool(
@@ -16,7 +17,9 @@ export function registerReadTools(server: McpServer) {
     "Get an overview of your knowledge graph: total nodes, edges, breakdown by type and source, and recent entries",
     { source: z.string().optional().describe("Filter by source (e.g. github:org/repo)") },
     async ({ source }, { authInfo }) => {
-      const userId = authInfo?.extra?.userId as string;
+      const access = requireMcpAccess(authInfo, "read");
+      if (!access.ok) return access.response;
+      const { userId } = access;
       const overview = await getOverview(userId, { source });
 
       const lines = [
@@ -55,7 +58,9 @@ export function registerReadTools(server: McpServer) {
       tags: z.array(z.string()).optional().describe("Filter by tags"),
     },
     async ({ query, type, source, tags }, { authInfo }) => {
-      const userId = authInfo?.extra?.userId as string;
+      const access = requireMcpAccess(authInfo, "read");
+      if (!access.ok) return access.response;
+      const { userId } = access;
 
       // Try hybrid search (text + semantic), fallback to text-only
       let queryEmbedding: number[] | null = null;
@@ -95,7 +100,9 @@ export function registerReadTools(server: McpServer) {
     "Get the full content of a specific knowledge node by its slug",
     { slug: z.string().describe("Knowledge node slug") },
     async ({ slug }, { authInfo }) => {
-      const userId = authInfo?.extra?.userId as string;
+      const access = requireMcpAccess(authInfo, "read");
+      if (!access.ok) return access.response;
+      const { userId } = access;
       const node = await getNodeBySlug(slug, userId);
 
       if (!node) {
@@ -130,7 +137,9 @@ export function registerReadTools(server: McpServer) {
       relationship: z.enum(edgeRelationships).optional().describe(`Filter by relationship type (${edgeRelationships.join(", ")})`),
     },
     async ({ slug, relationship }, { authInfo }) => {
-      const userId = authInfo?.extra?.userId as string;
+      const access = requireMcpAccess(authInfo, "read");
+      if (!access.ok) return access.response;
+      const { userId } = access;
       const node = await getNodeBySlug(slug, userId);
 
       if (!node) {
@@ -171,7 +180,9 @@ export function registerReadTools(server: McpServer) {
       source: z.string().optional().describe("Filter by source/repo to get project-specific guidance"),
     },
     async ({ topic, source }, { authInfo }) => {
-      const userId = authInfo?.extra?.userId as string;
+      const access = requireMcpAccess(authInfo, "read");
+      if (!access.ok) return access.response;
+      const { userId } = access;
       const nodes = await searchNodes(userId, topic, {
         source,
         type: undefined,
