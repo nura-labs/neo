@@ -8,11 +8,15 @@ const FETCH_TIMEOUT_MS = 10_000;
 const BLOCKED_HOSTS = new Set(["localhost", "metadata.google.internal"]);
 
 function isBlockedIp(address: string): boolean {
-  if (address === "::1") return true;
-  if (address.startsWith("fc") || address.startsWith("fd")) return true;
-  if (address.startsWith("fe80:")) return true;
+  const normalized = address.toLowerCase();
+  const mappedIpv4 = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
+  if (mappedIpv4) return isBlockedIp(mappedIpv4);
 
-  const parts = address.split(".").map((part) => Number(part));
+  if (normalized === "::" || normalized === "::1") return true;
+  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true;
+  if (normalized.startsWith("fe80:")) return true;
+
+  const parts = normalized.split(".").map((part) => Number(part));
   if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) {
     return false;
   }
@@ -22,9 +26,13 @@ function isBlockedIp(address: string): boolean {
     a === 0 ||
     a === 10 ||
     a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168)
+    (a === 192 && b === 0) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
   );
 }
 
