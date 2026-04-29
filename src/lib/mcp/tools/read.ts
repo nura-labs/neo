@@ -8,6 +8,7 @@ import {
   getRelatedNodes,
 } from "@/lib/db/queries";
 import { generateEmbedding } from "@/lib/knowledge/embeddings";
+import { edgeRelationships, knowledgeNodeTypes } from "@/lib/validators/knowledge";
 
 export function registerReadTools(server: McpServer) {
   server.tool(
@@ -16,7 +17,7 @@ export function registerReadTools(server: McpServer) {
     { source: z.string().optional().describe("Filter by source (e.g. github:org/repo)") },
     async ({ source }, { authInfo }) => {
       const userId = authInfo?.extra?.userId as string;
-      const overview = await getOverview(userId);
+      const overview = await getOverview(userId, { source });
 
       const lines = [
         `## Knowledge Graph Overview`,
@@ -49,7 +50,7 @@ export function registerReadTools(server: McpServer) {
     "Search your knowledge graph using full-text search. Returns matching knowledge nodes ranked by relevance.",
     {
       query: z.string().describe("Search query"),
-      type: z.string().optional().describe("Filter by node type (pattern, convention, module, architecture, decision, concept, note, reference, person, project, tool, research)"),
+      type: z.enum(knowledgeNodeTypes).optional().describe(`Filter by node type (${knowledgeNodeTypes.join(", ")})`),
       source: z.string().optional().describe("Filter by source (e.g. github:org/repo)"),
       tags: z.array(z.string()).optional().describe("Filter by tags"),
     },
@@ -126,7 +127,7 @@ export function registerReadTools(server: McpServer) {
     "Get all nodes related to a specific node, optionally filtered by relationship type",
     {
       slug: z.string().describe("Knowledge node slug"),
-      relationship: z.string().optional().describe("Filter by relationship type"),
+      relationship: z.enum(edgeRelationships).optional().describe(`Filter by relationship type (${edgeRelationships.join(", ")})`),
     },
     async ({ slug, relationship }, { authInfo }) => {
       const userId = authInfo?.extra?.userId as string;

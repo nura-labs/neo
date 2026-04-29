@@ -363,13 +363,29 @@ export async function hybridSearch(
     .map((s) => s.node);
 }
 
-export async function getOverview(userId: string) {
+export async function getOverview(
+  userId: string,
+  filters?: { source?: string }
+) {
+  const nodeConditions = [eq(knowledgeNodes.userId, userId)];
+  const sourceBreakdownConditions = [
+    eq(knowledgeNodes.userId, userId),
+    sql`${knowledgeNodes.source} IS NOT NULL`,
+  ];
+
+  if (filters?.source) {
+    nodeConditions.push(eq(knowledgeNodes.source, filters.source));
+    sourceBreakdownConditions.push(eq(knowledgeNodes.source, filters.source));
+  }
+
+  const nodeWhere = and(...nodeConditions);
+
   const [nodeCount, edgeCount, typeBreakdown, sourceBreakdown, recentNodes] =
     await Promise.all([
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(knowledgeNodes)
-        .where(eq(knowledgeNodes.userId, userId)),
+        .where(nodeWhere),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(knowledgeEdges)
@@ -377,14 +393,14 @@ export async function getOverview(userId: string) {
           knowledgeNodes,
           eq(knowledgeEdges.sourceId, knowledgeNodes.id)
         )
-        .where(eq(knowledgeNodes.userId, userId)),
+        .where(nodeWhere),
       db
         .select({
           type: knowledgeNodes.type,
           count: sql<number>`count(*)::int`,
         })
         .from(knowledgeNodes)
-        .where(eq(knowledgeNodes.userId, userId))
+        .where(nodeWhere)
         .groupBy(knowledgeNodes.type),
       db
         .select({
@@ -392,17 +408,12 @@ export async function getOverview(userId: string) {
           count: sql<number>`count(*)::int`,
         })
         .from(knowledgeNodes)
-        .where(
-          and(
-            eq(knowledgeNodes.userId, userId),
-            sql`${knowledgeNodes.source} IS NOT NULL`
-          )
-        )
+        .where(and(...sourceBreakdownConditions))
         .groupBy(knowledgeNodes.source),
       db
         .select()
         .from(knowledgeNodes)
-        .where(eq(knowledgeNodes.userId, userId))
+        .where(nodeWhere)
         .orderBy(desc(knowledgeNodes.updatedAt))
         .limit(5),
     ]);

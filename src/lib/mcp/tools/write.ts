@@ -4,14 +4,17 @@ import { createNode, updateNode, getNodeBySlug, createEdge } from "@/lib/db/quer
 import { knowledgeNodeTypes, edgeRelationships } from "@/lib/validators/knowledge";
 import { generateSlug } from "@/lib/utils/slugify";
 
+const nodeTypeDescription = `Type of knowledge (${knowledgeNodeTypes.join(", ")})`;
+const relationshipDescription = `Type of relationship (${edgeRelationships.join(", ")})`;
+
 export function registerWriteTools(server: McpServer) {
   server.tool(
     "add_knowledge",
-    "Add a new knowledge node to your graph. Use this to index patterns, conventions, architecture, modules, decisions, concepts, notes, references, people, projects, tools, or research. You can link to other nodes using [[wikilinks]] in your content — e.g. [[Auth Pattern]] or [[React|uses]].",
+    "Add a new knowledge node to your graph. Use this to index patterns, conventions, architecture, workflows, snippets, modules, APIs, services, configs, decisions, concepts, notes, references, people, teams, projects, tools, or research. You can link to other nodes using [[wikilinks]] in your content — e.g. [[Auth Pattern]] or [[React|uses]].",
     {
-      type: z.enum(knowledgeNodeTypes).describe("Type of knowledge: pattern, convention, module, architecture, decision, concept, note, reference, person, project, tool, research"),
+      type: z.enum(knowledgeNodeTypes).describe(nodeTypeDescription),
       title: z.string().describe("Descriptive title — this becomes the node's slug for wikilinks"),
-      content: z.string().describe("Full content in markdown. Use [[Node Title]] to link to other nodes, or [[Node Title|relationship]] for typed links (uses, follows, contains, depends_on, related_to, extends, contradicts, alternative_to, same_concept, evolved_from, implements)"),
+      content: z.string().describe(`Full content in markdown. Use [[Node Title]] to link to other nodes, or [[Node Title|relationship]] for typed links (${edgeRelationships.join(", ")})`),
       tags: z.array(z.string()).optional().describe("Tags for categorization"),
       source: z.string().optional().describe("Where this knowledge comes from (e.g. github:org/repo, url:https://...)"),
       source_meta: z
@@ -22,7 +25,7 @@ export function registerWriteTools(server: McpServer) {
         .array(
           z.object({
             title: z.string().describe("Title of the related node (resolved by slug)"),
-            relationship: z.enum(edgeRelationships).describe("Type of relationship"),
+            relationship: z.enum(edgeRelationships).describe(relationshipDescription),
           })
         )
         .optional()
@@ -79,7 +82,7 @@ export function registerWriteTools(server: McpServer) {
     {
       source_title: z.string().describe("Title of the source node"),
       target_title: z.string().describe("Title of the target node"),
-      relationship: z.enum(edgeRelationships).describe("Type of relationship: uses, follows, contains, depends_on, related_to, extends, contradicts, alternative_to, same_concept, evolved_from, implements"),
+      relationship: z.enum(edgeRelationships).describe(relationshipDescription),
     },
     async ({ source_title, target_title, relationship }, { authInfo }) => {
       const userId = authInfo?.extra?.userId as string;
@@ -135,7 +138,7 @@ export function registerWriteTools(server: McpServer) {
       slug: z.string().describe("Slug of the node to update"),
       title: z.string().optional().describe("New title"),
       content: z.string().optional().describe("New content (supports [[wikilinks]])"),
-      type: z.enum(knowledgeNodeTypes).optional().describe("New type"),
+      type: z.enum(knowledgeNodeTypes).optional().describe(`New ${nodeTypeDescription.toLowerCase()}`),
       tags: z.array(z.string()).optional().describe("New tags (replaces existing)"),
     },
     async ({ slug, title, content, type, tags }, { authInfo }) => {
