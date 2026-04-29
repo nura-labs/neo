@@ -1,0 +1,181 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ─── Neo Design System ─────────────────────────────────── */
+
+/* Dark theme (default) */
+:root {
+  --neo-bg: #121115;
+  --neo-surface: #121115;
+  --neo-surface2: #1a181d;
+  --neo-surface-hover: rgba(255, 255, 255, 0.04);
+
+  --neo-fg: #e8e6e3;
+  --neo-fg-secondary: rgba(255, 255, 255, 0.65);
+  --neo-fg-muted: rgba(255, 255, 255, 0.40);
+  --neo-fg-faint: rgba(255, 255, 255, 0.22);
+
+  --neo-accent: #e87040;
+  --neo-accent-hover: #f07d50;
+  --neo-accent-muted: rgba(232, 112, 64, 0.15);
+
+  --neo-border: rgba(255, 255, 255, 0.12);
+  --neo-border-hover: rgba(255, 255, 255, 0.20);
+  --neo-border-strong: rgba(255, 255, 255, 0.30);
+
+  --neo-success: #4ade80;
+  --neo-warning: #fbbf24;
+  --neo-error: #f87171;
+
+  --neo-radius: 0.5rem;
+  --neo-radius-lg: 0.75rem;
+  --neo-radius-xl: 1rem;
+  --neo-sidebar-width: 260px;
+  --neo-sidebar-collapsed: 56px;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-space-grotesk);
+
+  color-scheme: dark;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --neo-bg: #ffffff;
+  --neo-surface: #ffffff;
+  --neo-surface2: #f6f5f4;
+  --neo-surface-hover: rgba(0, 0, 0, 0.03);
+
+  --neo-fg: #1a1a1a;
+  --neo-fg-secondary: rgba(0, 0, 0, 0.65);
+  --neo-fg-muted: rgba(0, 0, 0, 0.40);
+  --neo-fg-faint: rgba(0, 0, 0, 0.20);
+
+  --neo-accent: #d4622e;
+  --neo-accent-hover: #c05828;
+  --neo-accent-muted: rgba(212, 98, 46, 0.10);
+
+  --neo-border: rgba(0, 0, 0, 0.10);
+  --neo-border-hover: rgba(0, 0, 0, 0.18);
+  --neo-border-strong: rgba(0, 0, 0, 0.28);
+
+  --neo-success: #16a34a;
+  --neo-warning: #ca8a04;
+  --neo-error: #dc2626;
+
+  color-scheme: light;
+}
+
+/* ─── Map to Tailwind tokens ────────────────────────────── */
+
+@theme inline {
+  --color-background: var(--neo-bg);
+  --color-foreground: var(--neo-fg);
+  --color-card: var(--neo-surface);
+  --color-card-foreground: var(--neo-fg);
+  --color-popover: var(--neo-surface);
+  --color-popover-foreground: var(--neo-fg);
+  --color-primary: var(--neo-accent);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--neo-surface2);
+  --color-secondary-foreground: var(--neo-fg);
+  --color-muted: var(--neo-surface2);
+  --color-muted-foreground: var(--neo-fg-secondary);
+  --color-accent: var(--neo-accent-muted);
+  --color-accent-foreground: var(--neo-accent);
+  --color-destructive: var(--neo-error);
+  --color-border: var(--neo-border);
+  --color-input: var(--neo-border-hover);
+  --color-ring: var(--neo-accent);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-sm: calc(var(--neo-radius) * 0.6);
+  --radius-md: calc(var(--neo-radius) * 0.8);
+  --radius-lg: var(--neo-radius);
+  --radius-xl: var(--neo-radius-lg);
+  --radius-2xl: var(--neo-radius-xl);
+}
+
+/* ─── Base ──────────────────────────────────────────────── */
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--neo-bg);
+    color: var(--neo-fg);
+    transition: background-color 0.2s, color 0.2s;
+  }
+
+  ::selection {
+    background: rgba(232, 112, 64, 0.30);
+  }
+
+  [data-theme="light"] ::selection {
+    background: rgba(212, 98, 46, 0.20);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--neo-border);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--neo-border-hover);
+  }
+}
+
+/* ─── Utilities ─────────────────────────────────────────── */
+
+@layer utilities {
+  .neo-surface {
+    background: var(--neo-surface);
+    border: 1px solid var(--neo-border);
+  }
+
+  .neo-surface-hover {
+    background: var(--neo-surface);
+    border: 1px solid var(--neo-border);
+    transition: border-color 0.15s ease;
+  }
+  .neo-surface-hover:hover {
+    border-color: var(--neo-border-hover);
+  }
+
+  .neo-heading {
+    font-family: var(--font-display), var(--font-sans), sans-serif;
+    font-weight: 600;
+    color: var(--neo-fg);
+  }
+
+  .neo-label {
+    font-family: var(--font-mono), monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--neo-fg-muted);
+  }
+
+  .neo-text-secondary {
+    color: var(--neo-fg-secondary);
+  }
+
+  .neo-text-muted {
+    color: var(--neo-fg-muted);
+  }
+}
