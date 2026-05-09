@@ -17,12 +17,24 @@ const firebaseErrors: Record<string, string> = {
 };
 
 export function getAuthErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    const match = error.message.match(/\(([^)]+)\)/);
-    const code = match?.[1];
+  console.error("[Auth Error]", error);
+
+  if (error && typeof error === "object") {
+    // Firebase errors have a .code property directly
+    const code = "code" in error ? (error as { code: string }).code : undefined;
     if (code && firebaseErrors[code]) {
       return firebaseErrors[code];
     }
+
+    // Fallback: try to extract from message string
+    if (error instanceof Error) {
+      const match = error.message.match(/\(([^)]+)\)/);
+      const fallbackCode = match?.[1];
+      if (fallbackCode && firebaseErrors[fallbackCode]) {
+        return firebaseErrors[fallbackCode];
+      }
+    }
   }
+
   return "Something went wrong. Please try again.";
 }
