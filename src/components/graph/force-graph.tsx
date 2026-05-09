@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ForceGraphMethods } from "react-force-graph-2d";
 import { useTheme } from "next-themes";
 import { apiFetch } from "@/lib/api";
 import { getNodeColor } from "@/lib/graph/colors";
@@ -56,7 +57,8 @@ export function KnowledgeGraph({
   const { theme } = useTheme();
   const isLight = theme === "light";
   const containerRef = useRef<HTMLDivElement>(null);
-  const fgRef = useRef<{ zoomToFit: (ms?: number, px?: number) => void } | null>(null);
+  const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
+  const forcesConfiguredRef = useRef(false);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -70,7 +72,7 @@ export function KnowledgeGraph({
 
   useEffect(() => {
     if (width && height) {
-      setDimensions({ width, height });
+      queueMicrotask(() => setDimensions({ width, height }));
       return;
     }
     if (!containerRef.current) return;
@@ -124,7 +126,6 @@ export function KnowledgeGraph({
       const isActive = n.id === activeNode;
       const isConnected = highlighted.has(n.id);
       const dimmed = hasActive && !isConnected;
-      const isPinned = n.fx !== undefined;
 
       const size = isActive ? 7 : 5;
       const nodeColor = getNodeColor(n.type);
@@ -273,17 +274,15 @@ export function KnowledgeGraph({
           d3VelocityDecay={0.25}
           warmupTicks={100}
           cooldownTicks={300}
-          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-          ref={fgRef as any}
+          ref={fgRef}
           onEngineStop={() => fgRef.current?.zoomToFit(300, 40)}
-          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
           onRenderFramePost={() => {
-            const fg = fgRef.current as any;
-            if (fg && !fg.__forcesConfigured) {
+            const fg = fgRef.current;
+            if (fg && !forcesConfiguredRef.current) {
               fg.d3Force("charge", forceManyBody().strength(-40).distanceMax(200));
               fg.d3Force("centerX", forceX(0).strength(0.06));
               fg.d3Force("centerY", forceY(0).strength(0.06));
-              fg.__forcesConfigured = true;
+              forcesConfiguredRef.current = true;
               fg.d3ReheatSimulation();
             }
           }}

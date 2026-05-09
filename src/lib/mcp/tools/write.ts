@@ -1,17 +1,28 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createNode, updateNode, getNodeBySlug, createEdge } from "@/lib/db/queries";
+import {
+  createNode,
+  updateNode,
+  getNodeBySlug,
+  createEdge,
+  findNodeBySlugOrTitle,
+  getEdgeByNodes,
+} from "@/lib/db/queries";
 import { knowledgeNodeTypes, edgeRelationships } from "@/lib/validators/knowledge";
 import { generateSlug } from "@/lib/utils/slugify";
+import { requireMcpAccess } from "@/lib/mcp/permissions";
+
+const nodeTypeDescription = `Type of knowledge (${knowledgeNodeTypes.join(", ")})`;
+const relationshipDescription = `Type of relationship (${edgeRelationships.join(", ")})`;
 
 export function registerWriteTools(server: McpServer) {
   server.tool(
     "add_knowledge",
-    "Add a new knowledge node to your graph. Use this to index patterns, conventions, architecture, modules, decisions, concepts, notes, references, people, projects, tools, or research. You can link to other nodes using [[wikilinks]] in your content — e.g. [[Auth Pattern]] or [[React|uses]].",
+    "Add a new knowledge node to your graph. Use this to index patterns, conventions, architecture, workflows, snippets, modules, APIs, services, configs, decisions, concepts, notes, references, people, teams, projects, tools, or research. You can link to other nodes using [[wikilinks]] in your content — e.g. [[Auth Pattern]] or [[React|uses]].",
     {
-      type: z.enum(knowledgeNodeTypes).describe("Type of knowledge: pattern, convention, module, architecture, decision, concept, note, reference, person, project, tool, research"),
+      type: z.enum(knowledgeNodeTypes).describe(nodeTypeDescription),
       title: z.string().describe("Descriptive title — this becomes the node's slug for wikilinks"),
-      content: z.string().describe("Full content in markdown. Use [[Node Title]] to link to other nodes, or [[Node Title|relationship]] for typed links (uses, follows, contains, depends_on, related_to, extends, contradicts, alternative_to, same_concept, evolved_from, implements)"),
+      content: z.string().describe(`Full content in markdown. Use [[Node Title]] to link to other nodes, or [[Node Title|relationship]] for typed links (${edgeRelationships.join(", ")})`),
       tags: z.array(z.string()).optional().describe("Tags for categorization"),
       source: z.string().optional().describe("Where this knowledge comes from (e.g. github:org/repo, url:https://...)"),
       source_meta: z
@@ -21,18 +32,20 @@ export function registerWriteTools(server: McpServer) {
       related_to: z
         .array(
           z.object({
-            title: z.string().describe("Title of the related node (resolved by slug)"),
-            relationship: z.enum(edgeRelationships).describe("Type of relationship"),
+            title: z.string().describe("Title or slug of the related node"),
+            relationship: z.enum(edgeRelationships).describe(relationshipDescription),
           })
         )
         .optional()
-        .describe("Create edges to existing nodes by title (no UUIDs needed)"),
+        .describe("Create edges to existing nodes by title or slug (no UUIDs needed)"),
     },
     async (
       { type, title, content, tags, source, source_meta, related_to },
       { authInfo }
     ) => {
-      const userId = authInfo?.extra?.userId as string;
+      const access = requireMcpAccess(authInfo, "write");
+      if (!access.ok) return access.response;
+      const { userId } = access;
 
       // Resolve related_to titles to IDs
       const resolvedRelations: { id: string; relationship: typeof edgeRelationships[number] }[] = [];
@@ -40,8 +53,7 @@ export function registerWriteTools(server: McpServer) {
 
       if (related_to) {
         for (const rel of related_to) {
-          const slug = generateSlug(rel.title);
-          const target = await getNodeBySlug(slug, userId);
+          const target = await findNodeBySlugOrTitle(rel.title, userId);
           if (target) {
             resolvedRelations.push({ id: target.id, relationship: rel.relationship });
           } else {
@@ -75,21 +87,23 @@ export function registerWriteTools(server: McpServer) {
 
   server.tool(
     "link_knowledge",
-    "Create a relationship between two existing knowledge nodes by their titles. No UUIDs needed.",
+    "Create a relationship between two existing knowledge nodes by title or slug. Idempotent: if the edge already exists, no duplicate is created.",
     {
-      source_title: z.string().describe("Title of the source node"),
-      target_title: z.string().describe("Title of the target node"),
-      relationship: z.enum(edgeRelationships).describe("Type of relationship: uses, follows, contains, depends_on, related_to, extends, contradicts, alternative_to, same_concept, evolved_from, implements"),
+      source_title: z.string().describe("Title or slug of the source node"),
+      target_title: z.string().describe("Title or slug of the target node"),
+      relationship: z.enum(edgeRelationships).describe(relationshipDescription),
     },
     async ({ source_title, target_title, relationship }, { authInfo }) => {
-      const userId = authInfo?.extra?.userId as string;
+      const access = requireMcpAccess(authInfo, "write");
+      if (!access.ok) return access.response;
+      const { userId } = access;
 
       const sourceSlug = generateSlug(source_title);
       const targetSlug = generateSlug(target_title);
 
       const [sourceNode, targetNode] = await Promise.all([
-        getNodeBySlug(sourceSlug, userId),
-        getNodeBySlug(targetSlug, userId),
+        findNodeBySlugOrTitle(source_title, userId),
+        findNodeBySlugOrTitle(target_title, userId),
       ]);
 
       if (!sourceNode) {
@@ -112,8 +126,22 @@ export function registerWriteTools(server: McpServer) {
       });
 
       if (!edge) {
+        const existingEdge = await getEdgeByNodes({
+          sourceId: sourceNode.id,
+          targetId: targetNode.id,
+          relationship,
+        });
+
         return {
-          content: [{ type: "text" as const, text: `Edge already exists: "${source_title}" → ${relationship} → "${target_title}"` }],
+          content: [
+            {
+              type: "text" as const,
+              text: existingEdge
+                ? `Edge already exists: **${sourceNode.title}** → ${relationship} → **${targetNode.title}**\n\ncreated: false`
+                : `Failed to create edge for **${sourceNode.title}** → ${relationship} → **${targetNode.title}**`,
+            },
+          ],
+          isError: !existingEdge,
         };
       }
 
@@ -121,7 +149,7 @@ export function registerWriteTools(server: McpServer) {
         content: [
           {
             type: "text" as const,
-            text: `Linked: **${sourceNode.title}** → ${relationship} → **${targetNode.title}**`,
+            text: `Linked: **${sourceNode.title}** → ${relationship} → **${targetNode.title}**\n\ncreated: true`,
           },
         ],
       };
@@ -135,11 +163,13 @@ export function registerWriteTools(server: McpServer) {
       slug: z.string().describe("Slug of the node to update"),
       title: z.string().optional().describe("New title"),
       content: z.string().optional().describe("New content (supports [[wikilinks]])"),
-      type: z.enum(knowledgeNodeTypes).optional().describe("New type"),
+      type: z.enum(knowledgeNodeTypes).optional().describe(`New ${nodeTypeDescription.toLowerCase()}`),
       tags: z.array(z.string()).optional().describe("New tags (replaces existing)"),
     },
     async ({ slug, title, content, type, tags }, { authInfo }) => {
-      const userId = authInfo?.extra?.userId as string;
+      const access = requireMcpAccess(authInfo, "write");
+      if (!access.ok) return access.response;
+      const { userId } = access;
 
       const existing = await getNodeBySlug(slug, userId);
       if (!existing) {

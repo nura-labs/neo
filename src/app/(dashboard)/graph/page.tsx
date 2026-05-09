@@ -38,8 +38,10 @@ export default function GraphPage() {
   // Fetch node detail when selected
   useEffect(() => {
     if (!selectedNodeId) {
-      setNodeDetail(null);
-      setRelatedNodes([]);
+      queueMicrotask(() => {
+        setNodeDetail(null);
+        setRelatedNodes([]);
+      });
       return;
     }
 

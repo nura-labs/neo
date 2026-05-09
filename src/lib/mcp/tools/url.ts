@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createNode } from "@/lib/db/queries";
+import { requireMcpAccess } from "@/lib/mcp/permissions";
+import { fetchPublicUrl } from "./fetch-url";
 
 export function registerUrlTool(server: McpServer) {
   server.tool(
@@ -17,26 +19,18 @@ export function registerUrlTool(server: McpServer) {
         .describe("Node type (defaults to reference)"),
     },
     async ({ url, title, tags, type }, { authInfo }) => {
-      const userId = authInfo?.extra?.userId as string;
+      const access = requireMcpAccess(authInfo, "write");
+      if (!access.ok) return access.response;
+      const { userId } = access;
 
       let content: string;
       let extractedTitle = title ?? url;
+      let finalUrl = url;
 
       try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Failed to fetch URL: ${response.status} ${response.statusText}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        const html = await response.text();
+        const result = await fetchPublicUrl(url);
+        const html = result.text;
+        finalUrl = result.finalUrl;
 
         const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
         if (!title && titleMatch) {
@@ -68,11 +62,12 @@ export function registerUrlTool(server: McpServer) {
       const node = await createNode(userId, {
         type: type ?? "reference",
         title: extractedTitle,
-        content: `Source: ${url}\n\n${content}`,
+        content: `Source: ${finalUrl}\n\n${content}`,
         tags: tags ?? [],
-        source: `url:${url}`,
+        source: `url:${finalUrl}`,
         sourceMeta: {
           url,
+          finalUrl,
           fetchedAt: new Date().toISOString(),
         },
         relatedTo: [],
