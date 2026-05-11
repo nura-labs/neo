@@ -24,14 +24,123 @@ const vector = customType<{ data: number[]; driverData: string }>({
   },
 });
 
+// ─── Users ──────────────────────────────────────────────
+//
+// `username` is added as nullable in migration 0004 and backfilled in 0005.
+// It becomes NOT NULL in migration 0006.
+// `api_token` is kept here for migration 0004; dropped in 0006 once the
+// new `api_tokens` table replaces it. Today it's broken / not in use.
+
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
+  username: text("username").unique(), // nullable in 0004, NOT NULL in 0006
   firebaseUid: text("firebase_uid").notNull().unique(),
-  apiToken: text("api_token").notNull().unique(),
+  apiToken: text("api_token").notNull().unique(), // dropped in 0006
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ─── Workspaces ─────────────────────────────────────────
+//
+// The workspace is the tenant. A user can be a member of many workspaces.
+// Solo workspace = 1 member. Shared workspace = 2+.
+
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    plan: text("plan").notNull().default("free"),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("workspaces_created_by_idx").on(table.createdByUserId)]
+);
+
+export const memberships = pgTable(
+  "memberships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // 'owner' | 'member' (CHECK enforced via app layer for v1)
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("memberships_workspace_user_idx").on(table.workspaceId, table.userId),
+    index("memberships_user_idx").on(table.userId),
+  ]
+);
+
+export const invites = pgTable(
+  "invites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role").notNull(), // 'owner' | 'member'
+    token: text("token").notNull().unique(), // URL-safe random, single-shot
+    invitedByUserId: uuid("invited_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedByUserId: uuid("accepted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("invites_workspace_idx").on(table.workspaceId),
+    index("invites_token_idx").on(table.token),
+  ]
+);
+
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(), // user-supplied label e.g. "MacBook MCP"
+    tokenPrefix: text("token_prefix").notNull(), // e.g. "sk-neo-acme-a1b2c3" — display + lookup hint
+    tokenHash: text("token_hash").notNull().unique(), // sha256 hex of full token
+    scopes: text("scopes")
+      .array()
+      .notNull()
+      .default(sql`'{"read","write"}'::text[]`),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("api_tokens_workspace_idx").on(table.workspaceId),
+    index("api_tokens_hash_idx").on(table.tokenHash),
+  ]
+);
+
+// ─── Knowledge Graph ────────────────────────────────────
+//
+// `workspace_id` is added as nullable in migration 0004, backfilled in 0005,
+// becomes NOT NULL in 0006. Same for `created_by_user_id`.
+// `user_id` stays for now (safety net; dropped in v1.1).
+// The unique slug index swaps from (user_id, slug) to (workspace_id, slug) in 0006.
 
 export const knowledgeNodes = pgTable(
   "knowledge_nodes",
@@ -40,6 +149,12 @@ export const knowledgeNodes = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }), // nullable in 0004, NOT NULL in 0006
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }), // nullable in 0004, NOT NULL in 0006
     slug: text("slug"),
     type: text("type").notNull(),
     title: text("title").notNull(),
@@ -59,6 +174,7 @@ export const knowledgeNodes = pgTable(
     index("knowledge_nodes_type_idx").on(table.userId, table.type),
     index("knowledge_nodes_source_idx").on(table.userId, table.source),
     uniqueIndex("knowledge_nodes_user_slug_idx").on(table.userId, table.slug),
+    // 0006 will drop the four indexes above and replace with workspace-scoped versions
   ]
 );
 
@@ -72,6 +188,9 @@ export const knowledgeEdges = pgTable(
     targetId: uuid("target_id")
       .notNull()
       .references(() => knowledgeNodes.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }), // nullable in 0004, NOT NULL in 0006
     relationship: text("relationship").notNull(),
     weight: real("weight").notNull().default(1.0),
     autoGenerated: boolean("auto_generated").notNull().default(false),
@@ -111,6 +230,9 @@ export const oauthCodes = pgTable("oauth_codes", {
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+    onDelete: "cascade",
+  }), // nullable for now; locked in at /authorize time when the client picks a workspace
   redirectUri: text("redirect_uri").notNull(),
   codeChallenge: text("code_challenge").notNull(),
   codeChallengeMethod: text("code_challenge_method").notNull().default("S256"),
@@ -130,6 +252,9 @@ export const dreamSuggestions = pgTable("dream_suggestions", {
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+    onDelete: "cascade",
+  }), // nullable in 0004, NOT NULL in 0006
   type: text("type").notNull(), // "edge_suggestion" | "contradiction" | "orphan"
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
   status: text("status").notNull().default("pending"), // "pending" | "accepted" | "dismissed"
@@ -140,9 +265,19 @@ export const dreamSuggestions = pgTable("dream_suggestions", {
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type Workspace = typeof workspaces.$inferSelect;
+export type NewWorkspace = typeof workspaces.$inferInsert;
+export type Membership = typeof memberships.$inferSelect;
+export type NewMembership = typeof memberships.$inferInsert;
+export type Invite = typeof invites.$inferSelect;
+export type NewInvite = typeof invites.$inferInsert;
+export type ApiToken = typeof apiTokens.$inferSelect;
+export type NewApiToken = typeof apiTokens.$inferInsert;
 export type KnowledgeNode = typeof knowledgeNodes.$inferSelect;
 export type NewKnowledgeNode = typeof knowledgeNodes.$inferInsert;
 export type KnowledgeEdge = typeof knowledgeEdges.$inferSelect;
 export type NewKnowledgeEdge = typeof knowledgeEdges.$inferInsert;
 export type DreamSuggestion = typeof dreamSuggestions.$inferSelect;
 export type NewDreamSuggestion = typeof dreamSuggestions.$inferInsert;
+
+export type Role = "owner" | "member";
