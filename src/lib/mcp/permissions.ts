@@ -3,18 +3,41 @@ type McpAuthInfo = {
   extra?: Record<string, unknown>;
 };
 
+interface AccessOk {
+  ok: true;
+  workspaceId: string;
+  workspaceSlug: string;
+  createdByUserId: string;
+  scopes: string[];
+}
+
+interface AccessFail {
+  ok: false;
+  response: {
+    content: { type: "text"; text: string }[];
+    isError: true;
+  };
+}
+
 export function requireMcpAccess(
   authInfo: unknown,
   requiredScope: "read" | "write"
-) {
+): AccessOk | AccessFail {
   const info = authInfo as McpAuthInfo | undefined;
-  const userId = info?.extra?.userId;
+  const workspaceId = info?.extra?.workspaceId;
+  const workspaceSlug = info?.extra?.workspaceSlug;
+  const createdByUserId = info?.extra?.createdByUserId;
 
-  if (typeof userId !== "string" || userId.length === 0) {
+  if (
+    typeof workspaceId !== "string" ||
+    workspaceId.length === 0 ||
+    typeof workspaceSlug !== "string" ||
+    typeof createdByUserId !== "string"
+  ) {
     return {
-      ok: false as const,
+      ok: false,
       response: {
-        content: [{ type: "text" as const, text: "Missing MCP user context" }],
+        content: [{ type: "text", text: "Missing MCP workspace context" }],
         isError: true,
       },
     };
@@ -22,26 +45,21 @@ export function requireMcpAccess(
 
   if (!info?.scopes?.includes(requiredScope)) {
     return {
-      ok: false as const,
+      ok: false,
       response: {
         content: [
-          {
-            type: "text" as const,
-            text: `Missing required MCP scope: ${requiredScope}`,
-          },
+          { type: "text", text: `Missing required MCP scope: ${requiredScope}` },
         ],
         isError: true,
       },
     };
   }
 
-  return { ok: true as const, userId };
-}
-
-export function requireMcpUserId(authInfo: unknown) {
-  const access = requireMcpAccess(authInfo, "read");
-  if (!access.ok) {
-    throw new Error(access.response.content[0].text);
-  }
-  return access.userId;
+  return {
+    ok: true,
+    workspaceId,
+    workspaceSlug,
+    createdByUserId,
+    scopes: info.scopes,
+  };
 }

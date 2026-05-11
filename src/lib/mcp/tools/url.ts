@@ -21,7 +21,7 @@ export function registerUrlTool(server: McpServer) {
     async ({ url, title, tags, type }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "write");
       if (!access.ok) return access.response;
-      const { userId } = access;
+      const { workspaceId, createdByUserId } = access;
 
       let content: string;
       let extractedTitle = title ?? url;
@@ -59,7 +59,7 @@ export function registerUrlTool(server: McpServer) {
         };
       }
 
-      const node = await createNode(userId, {
+      const node = await createNode(workspaceId, createdByUserId, {
         type: type ?? "reference",
         title: extractedTitle,
         content: `Source: ${finalUrl}\n\n${content}`,

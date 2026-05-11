@@ -19,8 +19,8 @@ export function registerReadTools(server: McpServer) {
     async ({ source }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "read");
       if (!access.ok) return access.response;
-      const { userId } = access;
-      const overview = await getOverview(userId, { source });
+      const { workspaceId } = access;
+      const overview = await getOverview(workspaceId, { source });
 
       const lines = [
         `## Knowledge Graph Overview`,
@@ -60,7 +60,7 @@ export function registerReadTools(server: McpServer) {
     async ({ query, type, source, tags }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "read");
       if (!access.ok) return access.response;
-      const { userId } = access;
+      const { workspaceId } = access;
 
       // Try hybrid search (text + semantic), fallback to text-only
       let queryEmbedding: number[] | null = null;
@@ -71,8 +71,8 @@ export function registerReadTools(server: McpServer) {
       }
 
       const nodes = queryEmbedding
-        ? await hybridSearch(userId, query, queryEmbedding, { type, source, tags })
-        : await searchNodes(userId, query, { type, source, tags });
+        ? await hybridSearch(workspaceId, query, queryEmbedding, { type, source, tags })
+        : await searchNodes(workspaceId, query, { type, source, tags });
 
       if (nodes.length === 0) {
         return {
@@ -102,8 +102,8 @@ export function registerReadTools(server: McpServer) {
     async ({ slug }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "read");
       if (!access.ok) return access.response;
-      const { userId } = access;
-      const node = await getNodeBySlug(slug, userId);
+      const { workspaceId } = access;
+      const node = await getNodeBySlug(slug, workspaceId);
 
       if (!node) {
         return {
@@ -112,7 +112,7 @@ export function registerReadTools(server: McpServer) {
         };
       }
 
-      const related = await getRelatedNodes(node.id, userId);
+      const related = await getRelatedNodes(node.id, workspaceId);
       const relatedText =
         related.length > 0
           ? `\n\n## Related\n${related.map((r) => `- ${r.direction === "outgoing" ? "→" : "←"} **${r.node.title}** (${r.edge.relationship}) [slug: ${r.node.slug}]`).join("\n")}`
@@ -139,8 +139,8 @@ export function registerReadTools(server: McpServer) {
     async ({ slug, relationship }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "read");
       if (!access.ok) return access.response;
-      const { userId } = access;
-      const node = await getNodeBySlug(slug, userId);
+      const { workspaceId } = access;
+      const node = await getNodeBySlug(slug, workspaceId);
 
       if (!node) {
         return {
@@ -149,7 +149,7 @@ export function registerReadTools(server: McpServer) {
         };
       }
 
-      const related = await getRelatedNodes(node.id, userId, { relationship });
+      const related = await getRelatedNodes(node.id, workspaceId, { relationship });
 
       if (related.length === 0) {
         return {
@@ -182,8 +182,8 @@ export function registerReadTools(server: McpServer) {
     async ({ topic, source }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "read");
       if (!access.ok) return access.response;
-      const { userId } = access;
-      const nodes = await searchNodes(userId, topic, {
+      const { workspaceId } = access;
+      const nodes = await searchNodes(workspaceId, topic, {
         source,
         type: undefined,
         tags: undefined,
@@ -214,5 +214,4 @@ export function registerReadTools(server: McpServer) {
       };
     }
   );
-
 }

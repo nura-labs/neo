@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser } from "@/lib/auth/api";
-import { getNodesByUser, createNode } from "@/lib/db/queries";
+import { getAuthenticatedContext } from "@/lib/auth/api";
+import { getNodesByWorkspace, createNode } from "@/lib/db/queries";
 import { createNodeSchema } from "@/lib/validators/knowledge";
 
 export async function GET(request: Request) {
-  let user;
+  let ctx;
   try {
-    user = await getAuthenticatedUser(request);
+    ctx = await getAuthenticatedContext(request);
   } catch {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     const page = parseInt(url.searchParams.get("page") ?? "1");
     const limit = parseInt(url.searchParams.get("limit") ?? "50");
 
-    const result = await getNodesByUser(user.id, { type, source, tags, page, limit });
+    const result = await getNodesByWorkspace(ctx.workspace.id, { type, source, tags, page, limit });
     return NextResponse.json(result);
   } catch (err) {
     console.error("knowledge query failed:", err instanceof Error ? err.message : err);
@@ -29,10 +29,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getAuthenticatedUser(request);
+    const ctx = await getAuthenticatedContext(request);
     const body = await request.json();
     const input = createNodeSchema.parse(body);
-    const node = await createNode(user.id, input);
+    const node = await createNode(ctx.workspace.id, ctx.user.id, input);
     return NextResponse.json(node, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "Not authenticated") {

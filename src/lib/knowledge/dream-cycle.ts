@@ -1,4 +1,4 @@
-import { eq, and, sql, isNull, lt } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { knowledgeNodes, knowledgeEdges, dreamSuggestions } from "@/lib/db/schema";
 import { createEdge } from "@/lib/db/queries";
@@ -13,7 +13,7 @@ const MAX_DISCOVERY_PAIRS = 500; // cap vector similarity candidates
 // ─── Types ──────────────────────────────────────────────
 
 export interface DreamCycleResult {
-  userId: string;
+  workspaceId: string;
   stats: {
     totalEdges: number;
     dirtyEdges: number;
@@ -147,7 +147,7 @@ Respond ONLY with the JSON array, no markdown:`;
 
 // ─── Dream Cycle Core ──────────────────────────────────
 
-export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
+export async function runDreamCycle(workspaceId: string): Promise<DreamCycleResult> {
   const actions = { edgesFixed: 0, edgesRemoved: 0, edgesCreated: 0, suggestionsAccepted: 0, suggestionsDismissed: 0 };
   let llmCalls = 0;
   const now = new Date();
@@ -155,29 +155,31 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
   // ══════════════════════════════════════════════════════
   // PHASE 1: AUDIT EDGES (delta + sampling)
   //
-  // "Dirty" edges = never analyzed OR their nodes changed
-  // since last analysis. Plus a random sample of old ones.
+  // Edges have workspace_id directly (post-multi-workspace migration),
+  // so the dirty-edge query no longer needs to join through both endpoints
+  // for tenant scoping — just join for titles/types.
   // ══════════════════════════════════════════════════════
 
-  // 1a. Dirty edges: new or nodes modified after last analysis
   const dirtyEdges = await db.execute<EdgeRow>(sql`
     SELECT
       ke.id as edge_id, ke.relationship, ke.auto_generated,
       src.title as source_title, src.type as source_type,
       tgt.title as target_title, tgt.type as target_type
     FROM knowledge_edges ke
-    JOIN knowledge_nodes src ON src.id = ke.source_id AND src.user_id = ${userId}
-    JOIN knowledge_nodes tgt ON tgt.id = ke.target_id AND tgt.user_id = ${userId}
-    WHERE ke.last_analyzed_at IS NULL
-       OR src.updated_at > ke.last_analyzed_at
-       OR tgt.updated_at > ke.last_analyzed_at
+    JOIN knowledge_nodes src ON src.id = ke.source_id
+    JOIN knowledge_nodes tgt ON tgt.id = ke.target_id
+    WHERE ke.workspace_id = ${workspaceId}
+      AND (
+        ke.last_analyzed_at IS NULL
+        OR src.updated_at > ke.last_analyzed_at
+        OR tgt.updated_at > ke.last_analyzed_at
+      )
   `);
 
-  // 1b. Sample of already-analyzed edges (quality control)
   const totalEdgesResult = await db.execute<{ cnt: number }>(sql`
     SELECT count(*)::int as cnt
-    FROM knowledge_edges ke
-    JOIN knowledge_nodes src ON src.id = ke.source_id AND src.user_id = ${userId}
+    FROM knowledge_edges
+    WHERE workspace_id = ${workspaceId}
   `);
   const totalEdges = totalEdgesResult.rows?.[0]?.cnt ?? 0;
 
@@ -193,9 +195,10 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
           src.title as source_title, src.type as source_type,
           tgt.title as target_title, tgt.type as target_type
         FROM knowledge_edges ke
-        JOIN knowledge_nodes src ON src.id = ke.source_id AND src.user_id = ${userId}
-        JOIN knowledge_nodes tgt ON tgt.id = ke.target_id AND tgt.user_id = ${userId}
-        WHERE ke.last_analyzed_at IS NOT NULL
+        JOIN knowledge_nodes src ON src.id = ke.source_id
+        JOIN knowledge_nodes tgt ON tgt.id = ke.target_id
+        WHERE ke.workspace_id = ${workspaceId}
+          AND ke.last_analyzed_at IS NOT NULL
         ORDER BY RANDOM()
         LIMIT ${sampleSize}
       `)
@@ -252,7 +255,7 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
   const orphans = await db.execute<{ id: string; title: string; type: string }>(sql`
     SELECT kn.id, kn.title, kn.type
     FROM knowledge_nodes kn
-    WHERE kn.user_id = ${userId}
+    WHERE kn.workspace_id = ${workspaceId}
       AND NOT EXISTS (
         SELECT 1 FROM knowledge_edges ke
         WHERE ke.source_id = kn.id OR ke.target_id = kn.id
@@ -262,9 +265,6 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
 
   // ══════════════════════════════════════════════════════
   // PHASE 3: DISCOVER NEW CONNECTIONS
-  //
-  // Vector similarity → collect candidates → single LLM
-  // call per chunk to classify relationships.
   // ══════════════════════════════════════════════════════
 
   interface Candidate {
@@ -289,7 +289,7 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
     .from(knowledgeNodes)
     .where(
       and(
-        eq(knowledgeNodes.userId, userId),
+        eq(knowledgeNodes.workspaceId, workspaceId),
         sql`${knowledgeNodes.embedding} IS NOT NULL`
       )
     );
@@ -307,11 +307,11 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
              kn.embedding <=> kn2.embedding AS distance
       FROM knowledge_nodes kn
       JOIN knowledge_nodes kn2
-        ON kn2.user_id = ${userId}
+        ON kn2.workspace_id = ${workspaceId}
         AND kn2.id != kn.id
         AND kn2.embedding IS NOT NULL
       WHERE kn.id = ${node.id}
-        AND kn.user_id = ${userId}
+        AND kn.workspace_id = ${workspaceId}
       ORDER BY kn.embedding <=> kn2.embedding
       LIMIT 3
     `);
@@ -324,13 +324,16 @@ export async function runDreamCycle(userId: string): Promise<DreamCycleResult> {
       if (analyzedPairs.has(pairKey)) continue;
       analyzedPairs.add(pairKey);
 
-      // Check no edge exists
+      // Check no edge exists in this workspace
       const existing = await db
         .select({ id: knowledgeEdges.id })
         .from(knowledgeEdges)
         .where(
-          sql`(source_id = ${node.id} AND target_id = ${neighbor.id})
-           OR (source_id = ${neighbor.id} AND target_id = ${node.id})`
+          and(
+            eq(knowledgeEdges.workspaceId, workspaceId),
+            sql`(source_id = ${node.id} AND target_id = ${neighbor.id})
+             OR (source_id = ${neighbor.id} AND target_id = ${node.id})`
+          )
         )
         .limit(1);
 
@@ -391,6 +394,7 @@ Respond ONLY with JSON array, no markdown:`;
         const targetId = suggestion.direction === "source_to_target" ? c.targetId : c.sourceId;
 
         const edge = await createEdge({
+          workspaceId,
           sourceId,
           targetId,
           relationship: suggestion.relationship,
@@ -410,7 +414,7 @@ Respond ONLY with JSON array, no markdown:`;
     .select()
     .from(dreamSuggestions)
     .where(
-      and(eq(dreamSuggestions.userId, userId), eq(dreamSuggestions.status, "pending"))
+      and(eq(dreamSuggestions.workspaceId, workspaceId), eq(dreamSuggestions.status, "pending"))
     );
 
   const actionable = pendingSuggestions.filter(
@@ -449,6 +453,7 @@ Respond ONLY with JSON array, no markdown:`;
           const p = sugg.payload as Record<string, unknown>;
           if (sugg.type === "edge_suggestion") {
             const edge = await createEdge({
+              workspaceId,
               sourceId: p.sourceId as string,
               targetId: p.targetId as string,
               relationship: (p.relationship as string) ?? "related_to",
@@ -477,7 +482,7 @@ Respond ONLY with JSON array, no markdown:`;
   }
 
   return {
-    userId,
+    workspaceId,
     stats: {
       totalEdges,
       dirtyEdges: dirtyEdges.rows?.length ?? 0,

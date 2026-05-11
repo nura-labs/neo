@@ -3,9 +3,18 @@ import { adminAuth } from "@/lib/auth/firebase-admin";
 import {
   getUserByFirebaseUid,
   createUser,
+  createWorkspace,
+  createMembership,
+  getWorkspaceBySlug,
+  getMembership,
+  listWorkspacesForUser,
   getOAuthClient,
   createOAuthCode,
 } from "@/lib/db/queries";
+import {
+  generateUniqueUsername,
+  generateUniqueWorkspaceSlug,
+} from "@/lib/utils/username";
 import { generateCode } from "@/lib/oauth/pkce";
 
 export async function POST(request: Request) {
@@ -17,6 +26,7 @@ export async function POST(request: Request) {
       codeChallenge,
       codeChallengeMethod,
       state,
+      workspaceSlug,
     } = await request.json();
 
     if (!idToken || !clientId || !redirectUri || !codeChallenge) {
@@ -26,20 +36,55 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify the Firebase ID token
     const decoded = await adminAuth.verifyIdToken(idToken);
 
-    // Get or create user
     let user = await getUserByFirebaseUid(decoded.uid);
     if (!user) {
+      const seed = decoded.email ?? decoded.uid;
+      const username = await generateUniqueUsername(seed);
       user = await createUser({
         email: decoded.email ?? "",
         name: decoded.name ?? decoded.email ?? "User",
+        username,
         firebaseUid: decoded.uid,
+      });
+      const slug = await generateUniqueWorkspaceSlug(`${username}-personal`);
+      const workspace = await createWorkspace({
+        slug,
+        name: `${user.name}'s workspace`,
+        createdByUserId: user.id,
+      });
+      await createMembership({
+        workspaceId: workspace.id,
+        userId: user.id,
+        role: "owner",
       });
     }
 
-    // Verify client exists
+    // Resolve which workspace this OAuth grant is for. Frontend may pass an
+    // explicit slug; otherwise default to the user's oldest workspace.
+    let resolvedWorkspaceId: string | null = null;
+    if (workspaceSlug) {
+      const ws = await getWorkspaceBySlug(workspaceSlug);
+      if (!ws) {
+        return NextResponse.json(
+          { error: "invalid_request", error_description: "Unknown workspace" },
+          { status: 400 }
+        );
+      }
+      const membership = await getMembership(ws.id, user.id);
+      if (!membership) {
+        return NextResponse.json(
+          { error: "access_denied", error_description: "Not a member of workspace" },
+          { status: 403 }
+        );
+      }
+      resolvedWorkspaceId = ws.id;
+    } else {
+      const list = await listWorkspacesForUser(user.id);
+      if (list.length > 0) resolvedWorkspaceId = list[0].id;
+    }
+
     const client = await getOAuthClient(clientId);
     if (!client) {
       return NextResponse.json(
@@ -48,7 +93,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify redirect_uri is registered
     if (!client.redirectUris.includes(redirectUri)) {
       return NextResponse.json(
         { error: "invalid_request", error_description: "Redirect URI not registered" },
@@ -56,18 +100,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate authorization code
     const code = generateCode();
     await createOAuthCode({
       code,
       clientId,
       userId: user.id,
+      workspaceId: resolvedWorkspaceId,
       redirectUri,
       codeChallenge,
       codeChallengeMethod: codeChallengeMethod ?? "S256",
     });
 
-    // Build redirect URL with code
     const redirect = new URL(redirectUri);
     redirect.searchParams.set("code", code);
     if (state) redirect.searchParams.set("state", state);

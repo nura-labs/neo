@@ -45,15 +45,14 @@ export function registerWriteTools(server: McpServer) {
     ) => {
       const access = requireMcpAccess(authInfo, "write");
       if (!access.ok) return access.response;
-      const { userId } = access;
+      const { workspaceId, createdByUserId } = access;
 
-      // Resolve related_to titles to IDs
       const resolvedRelations: { id: string; relationship: typeof edgeRelationships[number] }[] = [];
       const unresolvedTitles: string[] = [];
 
       if (related_to) {
         for (const rel of related_to) {
-          const target = await findNodeBySlugOrTitle(rel.title, userId);
+          const target = await findNodeBySlugOrTitle(rel.title, workspaceId);
           if (target) {
             resolvedRelations.push({ id: target.id, relationship: rel.relationship });
           } else {
@@ -62,7 +61,7 @@ export function registerWriteTools(server: McpServer) {
         }
       }
 
-      const node = await createNode(userId, {
+      const node = await createNode(workspaceId, createdByUserId, {
         type,
         title,
         content,
@@ -96,14 +95,14 @@ export function registerWriteTools(server: McpServer) {
     async ({ source_title, target_title, relationship }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "write");
       if (!access.ok) return access.response;
-      const { userId } = access;
+      const { workspaceId } = access;
 
       const sourceSlug = generateSlug(source_title);
       const targetSlug = generateSlug(target_title);
 
       const [sourceNode, targetNode] = await Promise.all([
-        findNodeBySlugOrTitle(source_title, userId),
-        findNodeBySlugOrTitle(target_title, userId),
+        findNodeBySlugOrTitle(source_title, workspaceId),
+        findNodeBySlugOrTitle(target_title, workspaceId),
       ]);
 
       if (!sourceNode) {
@@ -120,6 +119,7 @@ export function registerWriteTools(server: McpServer) {
       }
 
       const edge = await createEdge({
+        workspaceId,
         sourceId: sourceNode.id,
         targetId: targetNode.id,
         relationship,
@@ -127,6 +127,7 @@ export function registerWriteTools(server: McpServer) {
 
       if (!edge) {
         const existingEdge = await getEdgeByNodes({
+          workspaceId,
           sourceId: sourceNode.id,
           targetId: targetNode.id,
           relationship,
@@ -169,9 +170,9 @@ export function registerWriteTools(server: McpServer) {
     async ({ slug, title, content, type, tags }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "write");
       if (!access.ok) return access.response;
-      const { userId } = access;
+      const { workspaceId } = access;
 
-      const existing = await getNodeBySlug(slug, userId);
+      const existing = await getNodeBySlug(slug, workspaceId);
       if (!existing) {
         return {
           content: [{ type: "text" as const, text: "Node not found" }],
@@ -185,7 +186,7 @@ export function registerWriteTools(server: McpServer) {
       if (type !== undefined) updates.type = type;
       if (tags !== undefined) updates.tags = tags;
 
-      const node = await updateNode(existing.id, userId, updates);
+      const node = await updateNode(existing.id, workspaceId, updates);
 
       if (!node) {
         return {

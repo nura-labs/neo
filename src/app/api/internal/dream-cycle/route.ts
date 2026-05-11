@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { workspaces } from "@/lib/db/schema";
 import { runDreamCycle } from "@/lib/knowledge/dream-cycle";
 
 export const maxDuration = 900; // 15 minutes for Cloud Run
@@ -11,25 +11,25 @@ export async function POST(request: Request) {
   // No custom auth needed for internal endpoints.
 
   const url = new URL(request.url);
-  const targetUserId = url.searchParams.get("user_id");
+  const targetWorkspaceId = url.searchParams.get("workspace_id");
 
-  let userIds: string[];
+  let workspaceIds: string[];
 
-  if (targetUserId) {
-    userIds = [targetUserId];
+  if (targetWorkspaceId) {
+    workspaceIds = [targetWorkspaceId];
   } else {
-    const allUsers = await db.select({ id: users.id }).from(users);
-    userIds = allUsers.map((u) => u.id);
+    const all = await db.select({ id: workspaces.id }).from(workspaces);
+    workspaceIds = all.map((w) => w.id);
   }
 
   const results = [];
-  for (const userId of userIds) {
+  for (const workspaceId of workspaceIds) {
     try {
-      const result = await runDreamCycle(userId);
+      const result = await runDreamCycle(workspaceId);
       results.push(result);
     } catch (err) {
       results.push({
-        userId,
+        workspaceId,
         error: err instanceof Error ? err.message : "Unknown error",
       });
     }
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
-    usersProcessed: userIds.length,
+    workspacesProcessed: workspaceIds.length,
     results,
   });
 }

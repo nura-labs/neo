@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedContext } from "@/lib/auth/api";
-import { getGraphData } from "@/lib/db/queries";
+import { listMembers } from "@/lib/db/queries";
 
 export async function GET(request: Request) {
+  let ctx;
   try {
-    const ctx = await getAuthenticatedContext(request);
-    const graphData = await getGraphData(ctx.workspace.id);
-    return NextResponse.json(graphData);
+    ctx = await getAuthenticatedContext(request);
   } catch {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  const members = await listMembers(ctx.workspace.id);
+  return NextResponse.json({ members });
 }

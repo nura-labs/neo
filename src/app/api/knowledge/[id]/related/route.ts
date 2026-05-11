@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser } from "@/lib/auth/api";
+import { getAuthenticatedContext } from "@/lib/auth/api";
 import { getRelatedNodes } from "@/lib/db/queries";
 
 export async function GET(
@@ -7,13 +7,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthenticatedUser(request);
+    const ctx = await getAuthenticatedContext(request);
     const { id } = await params;
 
     const url = new URL(request.url);
     const relationship = url.searchParams.get("relationship") ?? undefined;
 
-    const related = await getRelatedNodes(id, user.id, { relationship });
+    const related = await getRelatedNodes(id, ctx.workspace.id, { relationship });
 
     return NextResponse.json(
       related.map((r) => ({

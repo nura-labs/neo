@@ -14,7 +14,7 @@ export function generateSlug(title: string): string {
 }
 
 export async function generateUniqueSlug(
-  userId: string,
+  workspaceId: string,
   title: string
 ): Promise<string> {
   const base = generateSlug(title);
@@ -25,7 +25,7 @@ export async function generateUniqueSlug(
     .from(knowledgeNodes)
     .where(
       and(
-        eq(knowledgeNodes.userId, userId),
+        eq(knowledgeNodes.workspaceId, workspaceId),
         like(knowledgeNodes.slug, `${base}%`)
       )
     );

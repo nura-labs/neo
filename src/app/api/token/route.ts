@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
-import { getOAuthCode, markOAuthCodeUsed, getOAuthClient, getUserById } from "@/lib/db/queries";
+import {
+  getOAuthCode,
+  markOAuthCodeUsed,
+  getOAuthClient,
+  getWorkspaceById,
+  createApiToken,
+} from "@/lib/db/queries";
 import { verifyPkce } from "@/lib/oauth/pkce";
+import { generateApiToken } from "@/lib/auth/token";
 
 export async function POST(request: Request) {
   try {
@@ -35,8 +42,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Look up the auth code
-    const authCode = await getOAuthCode(code);
+    // Look up the auth code (validates clientId in the same query — fixed gap)
+    const authCode = await getOAuthCode(code, clientId);
     if (!authCode) {
       return NextResponse.json(
         { error: "invalid_grant", error_description: "Invalid or expired authorization code" },
@@ -44,7 +51,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify expiration
     if (new Date() > authCode.expiresAt) {
       await markOAuthCodeUsed(code);
       return NextResponse.json(
@@ -53,15 +59,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify client_id matches
-    if (authCode.clientId !== clientId) {
-      return NextResponse.json(
-        { error: "invalid_grant", error_description: "Client mismatch" },
-        { status: 400 }
-      );
-    }
-
-    // Verify redirect_uri matches (if provided)
     if (redirectUri && authCode.redirectUri !== redirectUri) {
       return NextResponse.json(
         { error: "invalid_grant", error_description: "Redirect URI mismatch" },
@@ -69,7 +66,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify PKCE
     if (!verifyPkce(codeVerifier, authCode.codeChallenge, authCode.codeChallengeMethod)) {
       return NextResponse.json(
         { error: "invalid_grant", error_description: "PKCE verification failed" },
@@ -77,20 +73,42 @@ export async function POST(request: Request) {
       );
     }
 
-    // Mark code as used
-    await markOAuthCodeUsed(code);
-
-    // Get the user's API token
-    const user = await getUserById(authCode.userId);
-    if (!user) {
+    if (!authCode.workspaceId) {
       return NextResponse.json(
-        { error: "server_error", error_description: "User not found" },
+        { error: "invalid_grant", error_description: "Authorization code has no workspace" },
+        { status: 400 }
+      );
+    }
+
+    const workspace = await getWorkspaceById(authCode.workspaceId);
+    if (!workspace) {
+      return NextResponse.json(
+        { error: "server_error", error_description: "Workspace not found" },
         { status: 500 }
       );
     }
 
+    await markOAuthCodeUsed(code);
+
+    const client = await getOAuthClient(clientId);
+    const tokenName = client?.clientName
+      ? `OAuth: ${client.clientName}`
+      : `OAuth client ${clientId}`;
+
+    // Mint a fresh hashed API token; plaintext is returned to the client and
+    // never stored. Subsequent MCP requests carry this as a Bearer token.
+    const generated = generateApiToken(workspace.slug);
+    await createApiToken({
+      workspaceId: workspace.id,
+      createdByUserId: authCode.userId,
+      name: tokenName,
+      tokenPrefix: generated.prefix,
+      tokenHash: generated.hash,
+      scopes: ["read", "write"],
+    });
+
     return NextResponse.json({
-      access_token: user.apiToken,
+      access_token: generated.plaintext,
       token_type: "Bearer",
       scope: authCode.scopes.join(" "),
     });

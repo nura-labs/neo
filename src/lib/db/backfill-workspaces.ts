@@ -1,15 +1,15 @@
 /**
- * Migration 0005 (data) — backfill workspaces, memberships, and tenant FKs
- * for every existing user.
+ * Backfill workspaces, memberships, and tenant FKs for every existing user.
+ * Runs as a manual data step BETWEEN drizzle migrations 0004 and 0005.
  *
  * Safe to re-run: only processes users where `username IS NULL`. Each user's
  * 6-step backfill happens in its own transaction so a single bad row does not
  * abort the whole script.
  *
- * Run after migration 0004 has applied:
- *   npx tsx src/lib/db/backfill-workspaces.ts
- *
- * Then apply migration 0006 (NOT NULL constraints + drop users.api_token).
+ * Deploy order:
+ *   1. npx drizzle-kit migrate         # applies 0004 (additive tables + nullable cols)
+ *   2. npx tsx src/lib/db/backfill-workspaces.ts
+ *   3. npx drizzle-kit migrate         # applies 0005 (NOT NULL + drop api_token)
  */
 
 import { eq, isNull, sql } from "drizzle-orm";

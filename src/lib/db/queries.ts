@@ -1,56 +1,56 @@
-import { eq, and, sql, desc, arrayContains, inArray, lt } from "drizzle-orm";
+import { eq, and, sql, desc, arrayContains, inArray, isNull, gt } from "drizzle-orm";
 import { db } from "./index";
-import { users, knowledgeNodes, knowledgeEdges, dreamSuggestions, oauthClients, oauthCodes } from "./schema";
+import {
+  users,
+  workspaces,
+  memberships,
+  invites,
+  apiTokens,
+  knowledgeNodes,
+  knowledgeEdges,
+  dreamSuggestions,
+  oauthClients,
+  oauthCodes,
+} from "./schema";
 import type {
   User,
+  Workspace,
+  Membership,
+  Invite,
+  ApiToken,
   KnowledgeNode,
   KnowledgeEdge,
-  NewKnowledgeNode,
   DreamSuggestion,
+  Role,
 } from "./schema";
 import type { CreateNodeInput, UpdateNodeInput } from "../validators/knowledge";
-import { randomBytes } from "crypto";
 import { generateSlug, generateUniqueSlug } from "../utils/slugify";
 import { syncWikilinkEdges } from "../knowledge/sync-edges";
 import { generateNodeEmbedding } from "../knowledge/embeddings";
 
-// ─── Embedding Helper ──────────────────────────────────
+// ─── Embedding helper ─────────────────────────────────────
 
 function updateEmbeddingInBackground(nodeId: string, title: string, content: string) {
   generateNodeEmbedding(title, content)
     .then((embedding) =>
-      db
-        .update(knowledgeNodes)
-        .set({ embedding })
-        .where(eq(knowledgeNodes.id, nodeId))
+      db.update(knowledgeNodes).set({ embedding }).where(eq(knowledgeNodes.id, nodeId))
     )
     .catch((err) => console.error(`Embedding failed for node ${nodeId}:`, err));
 }
 
-// ─── Users ──────────────────────────────────────────────
-
-export function generateApiToken(): string {
-  return `sk-neo-${randomBytes(24).toString("hex")}`;
-}
+// ─── Users ────────────────────────────────────────────────
 
 export async function createUser(data: {
   email: string;
   name: string;
+  username: string;
   firebaseUid: string;
 }): Promise<User> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      ...data,
-      apiToken: generateApiToken(),
-    })
-    .returning();
+  const [user] = await db.insert(users).values(data).returning();
   return user;
 }
 
-export async function getUserByFirebaseUid(
-  firebaseUid: string
-): Promise<User | null> {
+export async function getUserByFirebaseUid(firebaseUid: string): Promise<User | null> {
   const [user] = await db
     .select()
     .from(users)
@@ -59,49 +59,313 @@ export async function getUserByFirebaseUid(
   return user ?? null;
 }
 
-export async function getUserByApiToken(
-  apiToken: string
-): Promise<User | null> {
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.apiToken, apiToken))
-    .limit(1);
-  return user ?? null;
-}
-
 export async function getUserById(id: string): Promise<User | null> {
+  const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return user ?? null;
+}
+
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return user ?? null;
+}
+
+export async function getUserByUsername(username: string): Promise<User | null> {
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.id, id))
+    .where(eq(users.username, username))
     .limit(1);
   return user ?? null;
 }
 
-export async function regenerateApiToken(userId: string): Promise<string> {
-  const newToken = generateApiToken();
-  await db
-    .update(users)
-    .set({ apiToken: newToken })
-    .where(eq(users.id, userId));
-  return newToken;
+// ─── Workspaces ───────────────────────────────────────────
+
+export async function createWorkspace(data: {
+  slug: string;
+  name: string;
+  createdByUserId: string;
+  plan?: string;
+}): Promise<Workspace> {
+  const [workspace] = await db
+    .insert(workspaces)
+    .values({
+      slug: data.slug,
+      name: data.name,
+      createdByUserId: data.createdByUserId,
+      plan: data.plan ?? "free",
+    })
+    .returning();
+  return workspace;
 }
 
-// ─── Knowledge Nodes ────────────────────────────────────
+export async function getWorkspaceBySlug(slug: string): Promise<Workspace | null> {
+  const [workspace] = await db
+    .select()
+    .from(workspaces)
+    .where(eq(workspaces.slug, slug))
+    .limit(1);
+  return workspace ?? null;
+}
+
+export async function getWorkspaceById(id: string): Promise<Workspace | null> {
+  const [workspace] = await db
+    .select()
+    .from(workspaces)
+    .where(eq(workspaces.id, id))
+    .limit(1);
+  return workspace ?? null;
+}
+
+export async function listWorkspacesForUser(
+  userId: string
+): Promise<Array<Workspace & { role: Role; memberCount: number }>> {
+  const rows = await db
+    .select({
+      workspace: workspaces,
+      role: memberships.role,
+      memberCount: sql<number>`(
+        SELECT count(*)::int FROM memberships m2 WHERE m2.workspace_id = ${workspaces.id}
+      )`.as("member_count"),
+    })
+    .from(memberships)
+    .innerJoin(workspaces, eq(memberships.workspaceId, workspaces.id))
+    .where(eq(memberships.userId, userId))
+    .orderBy(desc(workspaces.createdAt));
+
+  return rows.map((r) => ({
+    ...r.workspace,
+    role: r.role as Role,
+    memberCount: r.memberCount,
+  }));
+}
+
+export async function updateWorkspace(
+  workspaceId: string,
+  updates: { name?: string; plan?: string }
+): Promise<Workspace | null> {
+  const [workspace] = await db
+    .update(workspaces)
+    .set({ ...updates, updatedAt: new Date() })
+    .where(eq(workspaces.id, workspaceId))
+    .returning();
+  return workspace ?? null;
+}
+
+export async function deleteWorkspace(workspaceId: string): Promise<boolean> {
+  const result = await db
+    .delete(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .returning({ id: workspaces.id });
+  return result.length > 0;
+}
+
+// ─── Memberships ──────────────────────────────────────────
+
+export async function createMembership(data: {
+  workspaceId: string;
+  userId: string;
+  role: Role;
+}): Promise<Membership> {
+  const [membership] = await db.insert(memberships).values(data).returning();
+  return membership;
+}
+
+export async function getMembership(
+  workspaceId: string,
+  userId: string
+): Promise<Membership | null> {
+  const [membership] = await db
+    .select()
+    .from(memberships)
+    .where(
+      and(
+        eq(memberships.workspaceId, workspaceId),
+        eq(memberships.userId, userId)
+      )
+    )
+    .limit(1);
+  return membership ?? null;
+}
+
+export async function listMembers(
+  workspaceId: string
+): Promise<Array<{ user: User; role: Role; joinedAt: Date }>> {
+  const rows = await db
+    .select({ user: users, role: memberships.role, joinedAt: memberships.createdAt })
+    .from(memberships)
+    .innerJoin(users, eq(memberships.userId, users.id))
+    .where(eq(memberships.workspaceId, workspaceId))
+    .orderBy(memberships.createdAt);
+
+  return rows.map((r) => ({ user: r.user, role: r.role as Role, joinedAt: r.joinedAt }));
+}
+
+export async function removeMembership(
+  workspaceId: string,
+  userId: string
+): Promise<boolean> {
+  const result = await db
+    .delete(memberships)
+    .where(
+      and(
+        eq(memberships.workspaceId, workspaceId),
+        eq(memberships.userId, userId)
+      )
+    )
+    .returning({ id: memberships.id });
+  return result.length > 0;
+}
+
+export async function countOwners(workspaceId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(memberships)
+    .where(
+      and(eq(memberships.workspaceId, workspaceId), eq(memberships.role, "owner"))
+    );
+  return row?.count ?? 0;
+}
+
+// ─── Invites ──────────────────────────────────────────────
+
+export async function createInvite(data: {
+  workspaceId: string;
+  email: string;
+  role: Role;
+  invitedByUserId: string;
+  token: string;
+  expiresAt: Date;
+}): Promise<Invite> {
+  const [invite] = await db.insert(invites).values(data).returning();
+  return invite;
+}
+
+export async function getInviteByToken(token: string): Promise<Invite | null> {
+  const [invite] = await db
+    .select()
+    .from(invites)
+    .where(eq(invites.token, token))
+    .limit(1);
+  return invite ?? null;
+}
+
+export async function listPendingInvites(workspaceId: string): Promise<Invite[]> {
+  return db
+    .select()
+    .from(invites)
+    .where(
+      and(
+        eq(invites.workspaceId, workspaceId),
+        isNull(invites.acceptedAt),
+        isNull(invites.revokedAt),
+        gt(invites.expiresAt, new Date())
+      )
+    )
+    .orderBy(desc(invites.createdAt));
+}
+
+export async function markInviteAccepted(
+  inviteId: string,
+  userId: string
+): Promise<void> {
+  await db
+    .update(invites)
+    .set({ acceptedAt: new Date(), acceptedByUserId: userId })
+    .where(eq(invites.id, inviteId));
+}
+
+export async function revokeInvite(
+  inviteId: string,
+  workspaceId: string
+): Promise<boolean> {
+  const result = await db
+    .update(invites)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(invites.id, inviteId), eq(invites.workspaceId, workspaceId)))
+    .returning({ id: invites.id });
+  return result.length > 0;
+}
+
+// ─── API Tokens ───────────────────────────────────────────
+
+export async function createApiToken(data: {
+  workspaceId: string;
+  createdByUserId: string;
+  name: string;
+  tokenPrefix: string;
+  tokenHash: string;
+  scopes?: string[];
+}): Promise<ApiToken> {
+  const [token] = await db
+    .insert(apiTokens)
+    .values({
+      workspaceId: data.workspaceId,
+      createdByUserId: data.createdByUserId,
+      name: data.name,
+      tokenPrefix: data.tokenPrefix,
+      tokenHash: data.tokenHash,
+      scopes: data.scopes ?? ["read", "write"],
+    })
+    .returning();
+  return token;
+}
+
+export async function getApiTokenByHash(
+  tokenHash: string
+): Promise<{ token: ApiToken; workspace: Workspace } | null> {
+  const [row] = await db
+    .select({ token: apiTokens, workspace: workspaces })
+    .from(apiTokens)
+    .innerJoin(workspaces, eq(apiTokens.workspaceId, workspaces.id))
+    .where(and(eq(apiTokens.tokenHash, tokenHash), isNull(apiTokens.revokedAt)))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function listApiTokens(workspaceId: string): Promise<ApiToken[]> {
+  return db
+    .select()
+    .from(apiTokens)
+    .where(and(eq(apiTokens.workspaceId, workspaceId), isNull(apiTokens.revokedAt)))
+    .orderBy(desc(apiTokens.createdAt));
+}
+
+export async function revokeApiToken(
+  tokenId: string,
+  workspaceId: string
+): Promise<boolean> {
+  const result = await db
+    .update(apiTokens)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(apiTokens.id, tokenId), eq(apiTokens.workspaceId, workspaceId)))
+    .returning({ id: apiTokens.id });
+  return result.length > 0;
+}
+
+export async function touchApiTokenLastUsed(tokenId: string): Promise<void> {
+  await db
+    .update(apiTokens)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(apiTokens.id, tokenId));
+}
+
+// ─── Knowledge Nodes ──────────────────────────────────────
 
 export async function createNode(
-  userId: string,
+  workspaceId: string,
+  createdByUserId: string,
   input: CreateNodeInput
 ): Promise<KnowledgeNode> {
   const { relatedTo, ...nodeData } = input;
 
-  const slug = await generateUniqueSlug(userId, nodeData.title);
+  const slug = await generateUniqueSlug(workspaceId, nodeData.title);
 
   const [node] = await db
     .insert(knowledgeNodes)
     .values({
-      userId,
+      userId: createdByUserId, // legacy column kept in sync with creator
+      workspaceId,
+      createdByUserId,
       slug,
       type: nodeData.type,
       title: nodeData.title,
@@ -116,6 +380,7 @@ export async function createNode(
     await Promise.all(
       relatedTo.map((rel) =>
         createEdge({
+          workspaceId,
           sourceId: node.id,
           targetId: rel.id,
           relationship: rel.relationship,
@@ -125,7 +390,7 @@ export async function createNode(
   }
 
   // Auto-generate edges from [[wikilinks]] in content
-  await syncWikilinkEdges(userId, node.id, node.content);
+  await syncWikilinkEdges(workspaceId, node.id, node.content);
 
   // Generate embedding in background (non-blocking)
   updateEmbeddingInBackground(node.id, node.title, node.content);
@@ -135,7 +400,7 @@ export async function createNode(
 
 export async function updateNode(
   nodeId: string,
-  userId: string,
+  workspaceId: string,
   input: UpdateNodeInput
 ): Promise<KnowledgeNode | null> {
   const updates: Record<string, unknown> = {
@@ -144,20 +409,25 @@ export async function updateNode(
   };
 
   if (input.title) {
-    updates.slug = await generateUniqueSlug(userId, input.title);
+    updates.slug = await generateUniqueSlug(workspaceId, input.title);
   }
 
   const [node] = await db
     .update(knowledgeNodes)
     .set(updates)
-    .where(and(eq(knowledgeNodes.id, nodeId), eq(knowledgeNodes.userId, userId)))
+    .where(
+      and(
+        eq(knowledgeNodes.id, nodeId),
+        eq(knowledgeNodes.workspaceId, workspaceId)
+      )
+    )
     .returning();
 
   if (!node) return null;
 
   // Re-sync wikilink edges when content changes
   if (input.content) {
-    await syncWikilinkEdges(userId, nodeId, input.content);
+    await syncWikilinkEdges(workspaceId, nodeId, input.content);
   }
 
   // Regenerate embedding if title or content changed
@@ -170,50 +440,68 @@ export async function updateNode(
 
 export async function deleteNode(
   nodeId: string,
-  userId: string
+  workspaceId: string
 ): Promise<boolean> {
   const result = await db
     .delete(knowledgeNodes)
-    .where(and(eq(knowledgeNodes.id, nodeId), eq(knowledgeNodes.userId, userId)))
+    .where(
+      and(
+        eq(knowledgeNodes.id, nodeId),
+        eq(knowledgeNodes.workspaceId, workspaceId)
+      )
+    )
     .returning({ id: knowledgeNodes.id });
   return result.length > 0;
 }
 
 export async function getNodeById(
   nodeId: string,
-  userId: string
+  workspaceId: string
 ): Promise<KnowledgeNode | null> {
   const [node] = await db
     .select()
     .from(knowledgeNodes)
-    .where(and(eq(knowledgeNodes.id, nodeId), eq(knowledgeNodes.userId, userId)))
+    .where(
+      and(
+        eq(knowledgeNodes.id, nodeId),
+        eq(knowledgeNodes.workspaceId, workspaceId)
+      )
+    )
     .limit(1);
   return node ?? null;
 }
 
 export async function getNodeBySlug(
   slug: string,
-  userId: string
+  workspaceId: string
 ): Promise<KnowledgeNode | null> {
   const [node] = await db
     .select()
     .from(knowledgeNodes)
-    .where(and(eq(knowledgeNodes.slug, slug), eq(knowledgeNodes.userId, userId)))
+    .where(
+      and(
+        eq(knowledgeNodes.slug, slug),
+        eq(knowledgeNodes.workspaceId, workspaceId)
+      )
+    )
     .limit(1);
   return node ?? null;
 }
 
 export async function findNodeBySlugOrTitle(
   identifier: string,
-  userId: string
+  workspaceId: string
 ): Promise<KnowledgeNode | null> {
   const slug = generateSlug(identifier);
   const conditions = slug
     ? and(
-        eq(knowledgeNodes.userId, userId),
+        eq(knowledgeNodes.workspaceId, workspaceId),
         sql`(${knowledgeNodes.slug} = ${slug} OR ${knowledgeNodes.title} = ${identifier})`
       )
-    : and(eq(knowledgeNodes.userId, userId), eq(knowledgeNodes.title, identifier));
+    : and(
+        eq(knowledgeNodes.workspaceId, workspaceId),
+        eq(knowledgeNodes.title, identifier)
+      );
 
   const [node] = await db
     .select()
@@ -231,23 +519,33 @@ export async function findNodeBySlugOrTitle(
   return node ?? null;
 }
 
-export async function nodesShareUser(
+/**
+ * Validate that two nodes belong to the same workspace. Used by createEdge to
+ * prevent cross-workspace edges (which would be a tenant leak).
+ */
+export async function nodesShareWorkspace(
   sourceId: string,
-  targetId: string
+  targetId: string,
+  workspaceId: string
 ): Promise<boolean> {
   const endpoints = await db
-    .select({ id: knowledgeNodes.id, userId: knowledgeNodes.userId })
+    .select({ id: knowledgeNodes.id, workspaceId: knowledgeNodes.workspaceId })
     .from(knowledgeNodes)
     .where(inArray(knowledgeNodes.id, [sourceId, targetId]));
 
   const source = endpoints.find((node) => node.id === sourceId);
   const target = endpoints.find((node) => node.id === targetId);
 
-  return Boolean(source && target && source.userId === target.userId);
+  return Boolean(
+    source &&
+      target &&
+      source.workspaceId === workspaceId &&
+      target.workspaceId === workspaceId
+  );
 }
 
-export async function getNodesByUser(
-  userId: string,
+export async function getNodesByWorkspace(
+  workspaceId: string,
   filters?: {
     type?: string;
     source?: string;
@@ -260,14 +558,10 @@ export async function getNodesByUser(
   const limit = filters?.limit ?? 50;
   const offset = (page - 1) * limit;
 
-  const conditions = [eq(knowledgeNodes.userId, userId)];
+  const conditions = [eq(knowledgeNodes.workspaceId, workspaceId)];
 
-  if (filters?.type) {
-    conditions.push(eq(knowledgeNodes.type, filters.type));
-  }
-  if (filters?.source) {
-    conditions.push(eq(knowledgeNodes.source, filters.source));
-  }
+  if (filters?.type) conditions.push(eq(knowledgeNodes.type, filters.type));
+  if (filters?.source) conditions.push(eq(knowledgeNodes.source, filters.source));
   if (filters?.tags && filters.tags.length > 0) {
     conditions.push(arrayContains(knowledgeNodes.tags, filters.tags));
   }
@@ -292,18 +586,14 @@ export async function getNodesByUser(
 }
 
 export async function searchNodes(
-  userId: string,
+  workspaceId: string,
   query: string,
   filters?: { type?: string; source?: string; tags?: string[] }
 ): Promise<KnowledgeNode[]> {
-  const conditions = [eq(knowledgeNodes.userId, userId)];
+  const conditions = [eq(knowledgeNodes.workspaceId, workspaceId)];
 
-  if (filters?.type) {
-    conditions.push(eq(knowledgeNodes.type, filters.type));
-  }
-  if (filters?.source) {
-    conditions.push(eq(knowledgeNodes.source, filters.source));
-  }
+  if (filters?.type) conditions.push(eq(knowledgeNodes.type, filters.type));
+  if (filters?.source) conditions.push(eq(knowledgeNodes.source, filters.source));
   if (filters?.tags && filters.tags.length > 0) {
     conditions.push(arrayContains(knowledgeNodes.tags, filters.tags));
   }
@@ -312,6 +602,8 @@ export async function searchNodes(
     .select({
       id: knowledgeNodes.id,
       userId: knowledgeNodes.userId,
+      workspaceId: knowledgeNodes.workspaceId,
+      createdByUserId: knowledgeNodes.createdByUserId,
       slug: knowledgeNodes.slug,
       type: knowledgeNodes.type,
       title: knowledgeNodes.title,
@@ -345,13 +637,13 @@ export async function searchNodes(
 }
 
 export async function semanticSearch(
-  userId: string,
+  workspaceId: string,
   queryEmbedding: number[],
   filters?: { type?: string; source?: string; tags?: string[] }
 ): Promise<KnowledgeNode[]> {
   const vectorStr = `[${queryEmbedding.join(",")}]`;
   const conditions = [
-    eq(knowledgeNodes.userId, userId),
+    eq(knowledgeNodes.workspaceId, workspaceId),
     sql`${knowledgeNodes.embedding} IS NOT NULL`,
   ];
 
@@ -372,16 +664,16 @@ export async function semanticSearch(
 }
 
 export async function hybridSearch(
-  userId: string,
+  workspaceId: string,
   query: string,
   queryEmbedding: number[] | null,
   filters?: { type?: string; source?: string; tags?: string[] }
 ): Promise<KnowledgeNode[]> {
-  const textResults = await searchNodes(userId, query, filters);
+  const textResults = await searchNodes(workspaceId, query, filters);
 
   if (!queryEmbedding) return textResults;
 
-  const vectorResults = await semanticSearch(userId, queryEmbedding, filters);
+  const vectorResults = await semanticSearch(workspaceId, queryEmbedding, filters);
 
   // Reciprocal Rank Fusion (k=60)
   const k = 60;
@@ -408,13 +700,10 @@ export async function hybridSearch(
     .map((s) => s.node);
 }
 
-export async function getOverview(
-  userId: string,
-  filters?: { source?: string }
-) {
-  const nodeConditions = [eq(knowledgeNodes.userId, userId)];
+export async function getOverview(workspaceId: string, filters?: { source?: string }) {
+  const nodeConditions = [eq(knowledgeNodes.workspaceId, workspaceId)];
   const sourceBreakdownConditions = [
-    eq(knowledgeNodes.userId, userId),
+    eq(knowledgeNodes.workspaceId, workspaceId),
     sql`${knowledgeNodes.source} IS NOT NULL`,
   ];
 
@@ -431,14 +720,11 @@ export async function getOverview(
         .select({ count: sql<number>`count(*)::int` })
         .from(knowledgeNodes)
         .where(nodeWhere),
+      // Edges now have workspace_id directly; no need to join through nodes
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(knowledgeEdges)
-        .innerJoin(
-          knowledgeNodes,
-          eq(knowledgeEdges.sourceId, knowledgeNodes.id)
-        )
-        .where(nodeWhere),
+        .where(eq(knowledgeEdges.workspaceId, workspaceId)),
       db
         .select({
           type: knowledgeNodes.type,
@@ -472,16 +758,19 @@ export async function getOverview(
   };
 }
 
-// ─── Knowledge Edges ────────────────────────────────────
+// ─── Knowledge Edges ──────────────────────────────────────
 
 export async function createEdge(data: {
+  workspaceId: string;
   sourceId: string;
   targetId: string;
   relationship: string;
   weight?: number;
   autoGenerated?: boolean;
 }): Promise<KnowledgeEdge | null> {
-  if (!(await nodesShareUser(data.sourceId, data.targetId))) {
+  if (
+    !(await nodesShareWorkspace(data.sourceId, data.targetId, data.workspaceId))
+  ) {
     return null;
   }
 
@@ -490,6 +779,7 @@ export async function createEdge(data: {
     .values({
       sourceId: data.sourceId,
       targetId: data.targetId,
+      workspaceId: data.workspaceId,
       relationship: data.relationship,
       weight: data.weight ?? 1.0,
       autoGenerated: data.autoGenerated ?? false,
@@ -499,7 +789,13 @@ export async function createEdge(data: {
   return edge ?? null;
 }
 
+/**
+ * SECURITY FIX: now requires workspaceId to scope the lookup. Previously this
+ * function returned an edge for any (source, target, relationship) tuple
+ * regardless of which workspace the caller belonged to — a cross-tenant leak.
+ */
 export async function getEdgeByNodes(data: {
+  workspaceId: string;
   sourceId: string;
   targetId: string;
   relationship: string;
@@ -509,6 +805,7 @@ export async function getEdgeByNodes(data: {
     .from(knowledgeEdges)
     .where(
       and(
+        eq(knowledgeEdges.workspaceId, data.workspaceId),
         eq(knowledgeEdges.sourceId, data.sourceId),
         eq(knowledgeEdges.targetId, data.targetId),
         eq(knowledgeEdges.relationship, data.relationship)
@@ -518,18 +815,16 @@ export async function getEdgeByNodes(data: {
   return edge ?? null;
 }
 
-export async function deleteEdge(edgeId: string, userId: string): Promise<boolean> {
-  // Verify the edge belongs to a node owned by this user before deleting
+export async function deleteEdge(
+  edgeId: string,
+  workspaceId: string
+): Promise<boolean> {
   const result = await db
     .delete(knowledgeEdges)
     .where(
       and(
         eq(knowledgeEdges.id, edgeId),
-        sql`EXISTS (
-          SELECT 1 FROM knowledge_nodes
-          WHERE knowledge_nodes.id = ${knowledgeEdges.sourceId}
-            AND knowledge_nodes.user_id = ${userId}
-        )`
+        eq(knowledgeEdges.workspaceId, workspaceId)
       )
     )
     .returning({ id: knowledgeEdges.id });
@@ -538,40 +833,32 @@ export async function deleteEdge(edgeId: string, userId: string): Promise<boolea
 
 export async function getRelatedNodes(
   nodeId: string,
-  userId: string,
+  workspaceId: string,
   filters?: { relationship?: string }
 ): Promise<
   { node: KnowledgeNode; edge: KnowledgeEdge; direction: "outgoing" | "incoming" }[]
 > {
-  const outgoingConditions = [eq(knowledgeEdges.sourceId, nodeId)];
-  const incomingConditions = [eq(knowledgeEdges.targetId, nodeId)];
+  const baseEdgeFilter = eq(knowledgeEdges.workspaceId, workspaceId);
+
+  const outgoingConditions = [baseEdgeFilter, eq(knowledgeEdges.sourceId, nodeId)];
+  const incomingConditions = [baseEdgeFilter, eq(knowledgeEdges.targetId, nodeId)];
 
   if (filters?.relationship) {
-    outgoingConditions.push(
-      eq(knowledgeEdges.relationship, filters.relationship)
-    );
-    incomingConditions.push(
-      eq(knowledgeEdges.relationship, filters.relationship)
-    );
+    outgoingConditions.push(eq(knowledgeEdges.relationship, filters.relationship));
+    incomingConditions.push(eq(knowledgeEdges.relationship, filters.relationship));
   }
 
   const [outgoing, incoming] = await Promise.all([
     db
       .select({ node: knowledgeNodes, edge: knowledgeEdges })
       .from(knowledgeEdges)
-      .innerJoin(
-        knowledgeNodes,
-        eq(knowledgeEdges.targetId, knowledgeNodes.id)
-      )
-      .where(and(...outgoingConditions, eq(knowledgeNodes.userId, userId))),
+      .innerJoin(knowledgeNodes, eq(knowledgeEdges.targetId, knowledgeNodes.id))
+      .where(and(...outgoingConditions)),
     db
       .select({ node: knowledgeNodes, edge: knowledgeEdges })
       .from(knowledgeEdges)
-      .innerJoin(
-        knowledgeNodes,
-        eq(knowledgeEdges.sourceId, knowledgeNodes.id)
-      )
-      .where(and(...incomingConditions, eq(knowledgeNodes.userId, userId))),
+      .innerJoin(knowledgeNodes, eq(knowledgeEdges.sourceId, knowledgeNodes.id))
+      .where(and(...incomingConditions)),
   ]);
 
   return [
@@ -580,9 +867,9 @@ export async function getRelatedNodes(
   ];
 }
 
-// ─── Graph Data ─────────────────────────────────────────
+// ─── Graph Data ───────────────────────────────────────────
 
-export async function getGraphData(userId: string) {
+export async function getGraphData(workspaceId: string) {
   const [nodes, edges] = await Promise.all([
     db
       .select({
@@ -593,7 +880,7 @@ export async function getGraphData(userId: string) {
         tags: knowledgeNodes.tags,
       })
       .from(knowledgeNodes)
-      .where(eq(knowledgeNodes.userId, userId)),
+      .where(eq(knowledgeNodes.workspaceId, workspaceId)),
     db
       .select({
         id: knowledgeEdges.id,
@@ -603,11 +890,7 @@ export async function getGraphData(userId: string) {
         weight: knowledgeEdges.weight,
       })
       .from(knowledgeEdges)
-      .innerJoin(
-        knowledgeNodes,
-        eq(knowledgeEdges.sourceId, knowledgeNodes.id)
-      )
-      .where(eq(knowledgeNodes.userId, userId)),
+      .where(eq(knowledgeEdges.workspaceId, workspaceId)),
   ]);
 
   const edgeCounts = new Map<string, number>();
@@ -632,7 +915,7 @@ export async function getGraphData(userId: string) {
   };
 }
 
-// ─── OAuth ──────────────────────────────────────────────
+// ─── OAuth ────────────────────────────────────────────────
 
 export async function createOAuthClient(data: {
   clientId: string;
@@ -640,10 +923,7 @@ export async function createOAuthClient(data: {
   redirectUris: string[];
   clientName?: string;
 }) {
-  const [client] = await db
-    .insert(oauthClients)
-    .values(data)
-    .returning();
+  const [client] = await db.insert(oauthClients).values(data).returning();
   return client;
 }
 
@@ -660,6 +940,7 @@ export async function createOAuthCode(data: {
   code: string;
   clientId: string;
   userId: string;
+  workspaceId: string | null;
   redirectUri: string;
   codeChallenge: string;
   codeChallengeMethod?: string;
@@ -672,13 +953,21 @@ export async function createOAuthCode(data: {
   return authCode;
 }
 
-export async function getOAuthCode(code: string) {
+/**
+ * SECURITY FIX: now requires expectedClientId. Previously the lookup returned
+ * a row for any client_id given a matching code; the equality check happened
+ * after the lookup in the route handler, leaving a window for confused-deputy
+ * timing or other side effects. Pushing the check into the WHERE clause
+ * makes the row never returned for the wrong client.
+ */
+export async function getOAuthCode(code: string, expectedClientId: string) {
   const [authCode] = await db
     .select()
     .from(oauthCodes)
     .where(
       and(
         eq(oauthCodes.code, code),
+        eq(oauthCodes.clientId, expectedClientId),
         eq(oauthCodes.used, false)
       )
     )
@@ -687,23 +976,20 @@ export async function getOAuthCode(code: string) {
 }
 
 export async function markOAuthCodeUsed(code: string) {
-  await db
-    .update(oauthCodes)
-    .set({ used: true })
-    .where(eq(oauthCodes.code, code));
+  await db.update(oauthCodes).set({ used: true }).where(eq(oauthCodes.code, code));
 }
 
-// ─── Dream Suggestions ────────────────────────────────
+// ─── Dream Suggestions ────────────────────────────────────
 
 export async function getPendingSuggestions(
-  userId: string
+  workspaceId: string
 ): Promise<DreamSuggestion[]> {
   return db
     .select()
     .from(dreamSuggestions)
     .where(
       and(
-        eq(dreamSuggestions.userId, userId),
+        eq(dreamSuggestions.workspaceId, workspaceId),
         eq(dreamSuggestions.status, "pending")
       )
     )
@@ -713,7 +999,7 @@ export async function getPendingSuggestions(
 
 export async function resolveSuggestion(
   suggestionId: string,
-  userId: string,
+  workspaceId: string,
   action: "accepted" | "dismissed"
 ): Promise<DreamSuggestion | null> {
   const [suggestion] = await db
@@ -722,7 +1008,7 @@ export async function resolveSuggestion(
     .where(
       and(
         eq(dreamSuggestions.id, suggestionId),
-        eq(dreamSuggestions.userId, userId)
+        eq(dreamSuggestions.workspaceId, workspaceId)
       )
     )
     .returning();
