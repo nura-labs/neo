@@ -10,6 +10,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const members = await listMembers(ctx.workspace.id);
+  const rows = await listMembers(ctx.workspace.id);
+  // Flatten so the frontend doesn't have to traverse a nested user object
+  const members = rows.map((r) => ({
+    userId: r.user.id,
+    name: r.user.name,
+    email: r.user.email,
+    username: r.user.username,
+    role: r.role,
+    joinedAt: r.joinedAt,
+  }));
   return NextResponse.json({ members });
 }

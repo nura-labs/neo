@@ -141,7 +141,7 @@ export async function listWorkspacesForUser(
 
 export async function updateWorkspace(
   workspaceId: string,
-  updates: { name?: string; plan?: string }
+  updates: { name?: string; slug?: string; plan?: string }
 ): Promise<Workspace | null> {
   const [workspace] = await db
     .update(workspaces)

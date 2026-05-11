@@ -2,46 +2,44 @@
 
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { ProfileTab } from "@/components/settings/profile-tab";
 import { GeneralTab } from "@/components/settings/general-tab";
 import { MembersTab } from "@/components/settings/members-tab";
 import { TokensTab } from "@/components/settings/tokens-tab";
 
-type Tab = "general" | "members" | "tokens";
+type Tab = "profile" | "workspace" | "members" | "tokens";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "general", label: "General" },
+  { id: "profile", label: "Profile" },
+  { id: "workspace", label: "Workspace" },
   { id: "members", label: "Members" },
-  { id: "tokens", label: "Tokens" },
+  { id: "tokens", label: "Connect & tokens" },
 ];
 
 export default function SettingsPage() {
   const { currentWorkspace } = useAuth();
-  const [tab, setTab] = useState<Tab>("general");
-
-  if (!currentWorkspace) {
-    return (
-      <div className="max-w-2xl mx-auto">
-        <p className="text-sm neo-text-muted">Loading workspace…</p>
-      </div>
-    );
-  }
+  const [tab, setTab] = useState<Tab>("profile");
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="neo-heading text-lg">{currentWorkspace.name}</h1>
-        <p className="text-sm neo-text-muted">Workspace settings</p>
+        <h1 className="neo-heading text-lg">Settings</h1>
+        <p className="text-sm neo-text-muted">
+          {currentWorkspace
+            ? `${currentWorkspace.name} · ${currentWorkspace.slug}`
+            : "Loading…"}
+        </p>
       </div>
 
       <div
-        className="flex gap-1 border-b"
+        className="flex gap-1 border-b overflow-x-auto"
         style={{ borderColor: "var(--neo-border)" }}
       >
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className="px-3 py-2 text-sm font-medium transition-colors"
+            className="px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap"
             style={{
               color: tab === t.id ? "var(--neo-fg)" : "var(--neo-fg-muted)",
               borderBottom:
@@ -57,7 +55,8 @@ export default function SettingsPage() {
       </div>
 
       <div className="neo-surface rounded-xl p-6">
-        {tab === "general" && <GeneralTab />}
+        {tab === "profile" && <ProfileTab />}
+        {tab === "workspace" && <GeneralTab />}
         {tab === "members" && <MembersTab />}
         {tab === "tokens" && <TokensTab />}
       </div>
