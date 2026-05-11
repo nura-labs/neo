@@ -16,6 +16,8 @@ export type Workspace = {
   slug: string;
   name: string;
   plan: string;
+  role: "owner" | "member";
+  memberCount?: number;
 };
 
 interface AuthContextValue {

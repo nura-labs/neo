@@ -57,21 +57,16 @@ export function TokensTab() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [justCreated, setJustCreated] = useState<string | null>(null);
-  const [isOwner, setIsOwner] = useState(false);
+
+  const isOwner = currentWorkspace?.role === "owner";
 
   const refresh = useCallback(async () => {
     if (!currentWorkspace) return;
     setLoading(true);
-    const [tokensRes, wsRes] = await Promise.all([
-      apiFetch<{ tokens: ApiToken[] }>(
-        `/api/workspaces/${currentWorkspace.slug}/tokens`
-      ),
-      apiFetch<{ role: "owner" | "member" }>(
-        `/api/workspaces/${currentWorkspace.slug}`
-      ),
-    ]);
-    if (tokensRes.ok) setTokens(tokensRes.data.tokens);
-    if (wsRes.ok) setIsOwner(wsRes.data.role === "owner");
+    const res = await apiFetch<{ tokens: ApiToken[] }>(
+      `/api/workspaces/${currentWorkspace.slug}/tokens`
+    );
+    if (res.ok) setTokens(res.data.tokens);
     setLoading(false);
   }, [currentWorkspace]);
 

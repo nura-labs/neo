@@ -23,21 +23,16 @@ export function GeneralTab() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     if (!currentWorkspace) return;
     setName(currentWorkspace.name);
     setSlug(currentWorkspace.slug);
-    (async () => {
-      const res = await apiFetch<{ role: "owner" | "member" }>(
-        `/api/workspaces/${currentWorkspace.slug}`
-      );
-      if (res.ok) setIsOwner(res.data.role === "owner");
-    })();
   }, [currentWorkspace]);
 
   if (!currentWorkspace) return null;
+
+  const isOwner = currentWorkspace.role === "owner";
 
   const dirty =
     name !== currentWorkspace.name || slug !== currentWorkspace.slug;

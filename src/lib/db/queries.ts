@@ -200,6 +200,24 @@ export async function listMembers(
   return rows.map((r) => ({ user: r.user, role: r.role as Role, joinedAt: r.joinedAt }));
 }
 
+export async function updateMembershipRole(
+  workspaceId: string,
+  userId: string,
+  role: Role
+): Promise<boolean> {
+  const result = await db
+    .update(memberships)
+    .set({ role })
+    .where(
+      and(
+        eq(memberships.workspaceId, workspaceId),
+        eq(memberships.userId, userId)
+      )
+    )
+    .returning({ id: memberships.id });
+  return result.length > 0;
+}
+
 export async function removeMembership(
   workspaceId: string,
   userId: string
