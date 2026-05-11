@@ -11,6 +11,19 @@ interface Props {
 
 export function WorkspaceSwitcher({ collapsed = false }: Props) {
   const { workspaces, currentWorkspace, setCurrentWorkspaceSlug } = useAuth();
+
+  // Hard reload on switch — dashboard pages fetch data in useEffect with
+  // empty deps, so a soft state change leaves stale numbers on screen
+  // (issue: user switched to empty workspace but saw 49 nodes from previous).
+  function pickWorkspace(slug: string) {
+    if (slug === currentWorkspace?.slug) {
+      setOpen(false);
+      return;
+    }
+    setCurrentWorkspaceSlug(slug);
+    setOpen(false);
+    window.location.reload();
+  }
   const [open, setOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -50,10 +63,7 @@ export function WorkspaceSwitcher({ collapsed = false }: Props) {
             <SwitcherMenu
               workspaces={workspaces}
               current={currentWorkspace}
-              onPick={(slug) => {
-                setCurrentWorkspaceSlug(slug);
-                setOpen(false);
-              }}
+              onPick={pickWorkspace}
               onCreate={() => {
                 setOpen(false);
                 setCreateOpen(true);
@@ -86,10 +96,7 @@ export function WorkspaceSwitcher({ collapsed = false }: Props) {
           <SwitcherMenu
             workspaces={workspaces}
             current={currentWorkspace}
-            onPick={(slug) => {
-              setCurrentWorkspaceSlug(slug);
-              setOpen(false);
-            }}
+            onPick={pickWorkspace}
             onCreate={() => {
               setOpen(false);
               setCreateOpen(true);
