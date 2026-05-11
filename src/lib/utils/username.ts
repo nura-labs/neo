@@ -113,12 +113,31 @@ export async function generateUniqueUsername(seed: string): Promise<string> {
 }
 
 /**
- * Workspace slug uniqueness. Same algorithm as username but reads from `workspaces`.
- * Workspace slugs collide globally (URL-visible), so the same RESERVED set applies.
+ * Workspace-slug-style derivation: like deriveUsername, but preserves
+ * dashes between word boundaries so multi-word slugs read naturally
+ * (e.g. "Oscar Morales-personal" -> "oscar-morales-personal").
+ */
+export function deriveWorkspaceSlug(seed: string): string {
+  const base = seed
+    .split("@")[0]
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-")
+    .slice(0, MAX_LEN)
+    .replace(/-+$/g, "");
+  return base || "workspace";
+}
+
+/**
+ * Workspace slug uniqueness. Workspace slugs collide globally (URL-visible),
+ * so the same RESERVED set applies.
  */
 export async function generateUniqueWorkspaceSlug(seed: string): Promise<string> {
-  let base = deriveUsername(seed); // reuse the slugify-ish logic
-  if (isReservedName(base)) base = `${base}1`;
+  let base = deriveWorkspaceSlug(seed);
+  if (isReservedName(base)) base = `${base}-1`;
   if (base.length < MIN_LEN) base = `${base}${"1".repeat(MIN_LEN - base.length)}`;
 
   let candidate = base;
