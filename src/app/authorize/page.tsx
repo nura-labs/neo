@@ -23,6 +23,8 @@ import {
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
+type Workspace = { id: string; slug: string; name: string };
+
 function AuthorizeForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -31,6 +33,11 @@ function AuthorizeForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"login" | "signup">("login");
+
+  // Workspace selection step (post-auth)
+  const [pendingIdToken, setPendingIdToken] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [selectedSlug, setSelectedSlug] = useState<string>("");
 
   const clientId = searchParams.get("client_id");
   const redirectUri = searchParams.get("redirect_uri");
@@ -49,7 +56,7 @@ function AuthorizeForm() {
     );
   }
 
-  async function completeAuth(idToken: string) {
+  async function completeAuth(idToken: string, workspaceSlug?: string) {
     const res = await fetch("/api/auth/authorize-callback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -60,6 +67,7 @@ function AuthorizeForm() {
         codeChallenge,
         codeChallengeMethod,
         state,
+        workspaceSlug,
       }),
     });
 
@@ -70,6 +78,28 @@ function AuthorizeForm() {
 
     const data = await res.json();
     window.location.href = data.redirectUrl;
+  }
+
+  // After auth, fetch user's workspaces. If >1, prompt to pick one;
+  // if exactly 1, auto-complete; if 0, the user is brand new and the
+  // auto-create logic in the callback will handle it.
+  async function postAuth(idToken: string) {
+    const res = await fetch("/api/workspaces", {
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    if (!res.ok) {
+      // If we can't list workspaces, just call callback without slug — it
+      // will fall back to oldest membership or auto-create.
+      return completeAuth(idToken);
+    }
+    const data = (await res.json()) as { workspaces: Workspace[] };
+    if (data.workspaces.length <= 1) {
+      return completeAuth(idToken, data.workspaces[0]?.slug);
+    }
+    setPendingIdToken(idToken);
+    setWorkspaces(data.workspaces);
+    setSelectedSlug(data.workspaces[0].slug);
+    setLoading(false);
   }
 
   async function handleEmailAuth(e: React.FormEvent) {
@@ -85,7 +115,7 @@ function AuthorizeForm() {
         await updateProfile(result.user, { displayName: name });
       }
       const idToken = await result.user.getIdToken();
-      await completeAuth(idToken);
+      await postAuth(idToken);
     } catch (err) {
       setError(getAuthErrorMessage(err));
       setLoading(false);
@@ -99,11 +129,67 @@ function AuthorizeForm() {
       const provider = new GithubAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
-      await completeAuth(idToken);
+      await postAuth(idToken);
     } catch (err) {
       setError(getAuthErrorMessage(err));
       setLoading(false);
     }
+  }
+
+  async function handleConfirmWorkspace() {
+    if (!pendingIdToken) return;
+    setError("");
+    setLoading(true);
+    try {
+      await completeAuth(pendingIdToken, selectedSlug);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Authorization failed");
+      setLoading(false);
+    }
+  }
+
+  if (pendingIdToken) {
+    return (
+      <Card>
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl font-bold">Neo</CardTitle>
+          <CardDescription className="text-xs">by Nura Labs</CardDescription>
+          <CardDescription className="mt-2">
+            Choose the workspace to connect
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            {workspaces.map((w) => (
+              <label
+                key={w.id}
+                className="flex cursor-pointer items-center gap-3 rounded-md border p-3 hover:bg-accent"
+              >
+                <input
+                  type="radio"
+                  name="workspace"
+                  value={w.slug}
+                  checked={selectedSlug === w.slug}
+                  onChange={(e) => setSelectedSlug(e.target.value)}
+                />
+                <div>
+                  <div className="text-sm font-medium">{w.name}</div>
+                  <div className="text-xs text-muted-foreground">{w.slug}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button
+            className="w-full"
+            disabled={loading || !selectedSlug}
+            onClick={handleConfirmWorkspace}
+          >
+            {loading ? "Connecting..." : "Authorize this workspace"}
+          </Button>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

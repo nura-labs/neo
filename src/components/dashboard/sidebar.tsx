@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
 import {
   LayoutDashboard,
   FileText,
@@ -89,6 +90,11 @@ export function Sidebar() {
         >
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
+      </div>
+
+      {/* Workspace switcher */}
+      <div className={`px-3 pt-3 ${collapsed ? "flex justify-center" : ""}`}>
+        <WorkspaceSwitcher collapsed={collapsed} />
       </div>
 
       {/* Nav */}

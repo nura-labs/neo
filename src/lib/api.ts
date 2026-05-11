@@ -1,5 +1,7 @@
 import { auth } from "@/lib/auth/firebase-client";
 
+const WORKSPACE_LS_KEY = "neo-workspace";
+
 export async function apiFetch<T = unknown>(
   path: string,
   options?: RequestInit
@@ -15,6 +17,13 @@ export async function apiFetch<T = unknown>(
   if (user) {
     const token = await user.getIdToken();
     headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  // Attach the active workspace slug so workspace-scoped routes resolve it
+  // without each caller having to thread it through.
+  if (typeof window !== "undefined" && !headers["X-Workspace"]) {
+    const slug = window.localStorage.getItem(WORKSPACE_LS_KEY);
+    if (slug) headers["X-Workspace"] = slug;
   }
 
   const response = await fetch(path, {
