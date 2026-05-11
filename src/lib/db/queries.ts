@@ -275,8 +275,8 @@ export async function markInviteAccepted(
 }
 
 export async function revokeInvite(
-  inviteId: string,
-  workspaceId: string
+  workspaceId: string,
+  inviteId: string
 ): Promise<boolean> {
   const result = await db
     .update(invites)
@@ -331,8 +331,8 @@ export async function listApiTokens(workspaceId: string): Promise<ApiToken[]> {
 }
 
 export async function revokeApiToken(
-  tokenId: string,
-  workspaceId: string
+  workspaceId: string,
+  tokenId: string
 ): Promise<boolean> {
   const result = await db
     .update(apiTokens)
