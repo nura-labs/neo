@@ -6,6 +6,7 @@ import {
   hybridSearch,
   getNodeBySlug,
   getRelatedNodes,
+  getWorkspaceById,
 } from "@/lib/db/queries";
 import { generateEmbedding } from "@/lib/knowledge/embeddings";
 import { edgeRelationships, knowledgeNodeTypes } from "@/lib/validators/knowledge";
@@ -13,17 +14,38 @@ import { requireMcpAccess } from "@/lib/mcp/permissions";
 
 export function registerReadTools(server: McpServer) {
   server.tool(
+    "whoami",
+    "Identify which Neo workspace this MCP session is scoped to. Use this whenever you need to confirm context before reading or writing.",
+    {},
+    async (_args, { authInfo }) => {
+      const access = requireMcpAccess(authInfo, "read");
+      if (!access.ok) return access.response;
+      const { workspaceId, workspaceSlug } = access;
+      const ws = await getWorkspaceById(workspaceId);
+      const text = ws
+        ? `Connected to **${ws.name}** (slug: ${ws.slug}, plan: ${ws.plan}).\n\nAll tools in this MCP session are scoped to this workspace only.`
+        : `Connected to workspace slug ${workspaceSlug} (workspace record not found).`;
+      return { content: [{ type: "text" as const, text }] };
+    }
+  );
+
+  server.tool(
     "get_overview",
-    "Get an overview of your knowledge graph: total nodes, edges, breakdown by type and source, and recent entries",
+    "Get an overview of your knowledge graph: workspace identity, total nodes, edges, breakdown by type and source, and recent entries",
     { source: z.string().optional().describe("Filter by source (e.g. github:org/repo)") },
     async ({ source }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "read");
       if (!access.ok) return access.response;
-      const { workspaceId } = access;
-      const overview = await getOverview(workspaceId, { source });
+      const { workspaceId, workspaceSlug } = access;
+      const [overview, ws] = await Promise.all([
+        getOverview(workspaceId, { source }),
+        getWorkspaceById(workspaceId),
+      ]);
 
+      const wsLabel = ws ? `${ws.name} (slug: ${ws.slug})` : workspaceSlug;
       const lines = [
-        `## Knowledge Graph Overview`,
+        `## Knowledge Graph Overview — ${wsLabel}`,
+        `- **Workspace:** ${wsLabel}`,
         `- **Total nodes:** ${overview.totalNodes}`,
         `- **Total edges:** ${overview.totalEdges}`,
         ``,

@@ -1,0 +1,31 @@
+{
+  "name": "@nura/neo-wizard",
+  "version": "0.1.0",
+  "description": "One-line installer for Neo CLI and MCP across coding agents",
+  "license": "UNLICENSED",
+  "type": "module",
+  "bin": {
+    "neo-wizard": "./dist/wizard.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/wizard.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
