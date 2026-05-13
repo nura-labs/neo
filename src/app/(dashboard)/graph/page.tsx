@@ -49,8 +49,17 @@ export default function GraphPage() {
       apiFetch<NodeDetail>(`/api/knowledge/${selectedNodeId}`),
       apiFetch<RelatedNode[]>(`/api/knowledge/${selectedNodeId}/related`),
     ]).then(([nodeRes, relatedRes]) => {
-      if (nodeRes.ok) setNodeDetail(nodeRes.data);
-      if (relatedRes.ok) setRelatedNodes(relatedRes.data);
+      if (nodeRes.ok && nodeRes.data) {
+        setNodeDetail(nodeRes.data);
+      } else {
+        console.error(`Failed to load node ${selectedNodeId}:`, nodeRes.status, nodeRes.data);
+        setNodeDetail(null);
+      }
+      if (relatedRes.ok && Array.isArray(relatedRes.data)) {
+        setRelatedNodes(relatedRes.data);
+      }
+    }).catch((err) => {
+      console.error("Sidebar fetch failed:", err);
     });
   }, [selectedNodeId]);
 
@@ -103,7 +112,7 @@ export default function GraphPage() {
 
       {/* Preview panel */}
       <AnimatePresence>
-        {selectedNodeId && nodeDetail && (
+        {selectedNodeId && (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 400, opacity: 1 }}
@@ -127,16 +136,17 @@ export default function GraphPage() {
                 <div className="flex items-center gap-2 min-w-0">
                   <div
                     className="h-2.5 w-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: nodeTypeColors[nodeDetail.type] ?? "var(--neo-fg-muted)" }}
+                    style={{ backgroundColor: nodeDetail ? nodeTypeColors[nodeDetail.type] : "var(--neo-fg-muted)" }}
                   />
                   <span className="text-xs font-medium truncate" style={{ color: "var(--neo-fg)" }}>
-                    {nodeDetail.title}
+                    {nodeDetail ? nodeDetail.title : "Loading…"}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
-                    onClick={() => router.push(`/knowledge/${nodeDetail.id}`)}
-                    className="p-1.5 rounded transition-colors"
+                    onClick={() => nodeDetail && router.push(`/knowledge/${nodeDetail.id}`)}
+                    disabled={!nodeDetail}
+                    className="p-1.5 rounded transition-colors disabled:opacity-30"
                     style={{ color: "var(--neo-fg-muted)" }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "var(--neo-accent)")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--neo-fg-muted)")}
@@ -156,50 +166,58 @@ export default function GraphPage() {
                 </div>
               </div>
 
-              {/* Metadata */}
-              <div className="px-4 py-3 flex flex-wrap gap-1.5" style={{ borderBottom: "1px solid var(--neo-border)" }}>
-                <span
-                  className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                  style={{ background: "var(--neo-accent-muted)", color: "var(--neo-accent)" }}
-                >
-                  {nodeDetail.type}
-                </span>
-                {nodeDetail.source && (
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[10px]"
-                    style={{ background: "var(--neo-surface2)", color: "var(--neo-fg-muted)" }}
-                  >
-                    {nodeDetail.source}
-                  </span>
-                )}
-                {nodeDetail.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full px-2 py-0.5 text-[10px]"
-                    style={{ background: "var(--neo-surface2)", color: "var(--neo-fg-muted)" }}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
+              {!nodeDetail ? (
+                <div className="px-4 py-8 text-center text-sm" style={{ color: "var(--neo-fg-muted)" }}>
+                  Loading…
+                </div>
+              ) : (
+                <>
+                  {/* Metadata */}
+                  <div className="px-4 py-3 flex flex-wrap gap-1.5" style={{ borderBottom: "1px solid var(--neo-border)" }}>
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                      style={{ background: "var(--neo-accent-muted)", color: "var(--neo-accent)" }}
+                    >
+                      {nodeDetail.type}
+                    </span>
+                    {nodeDetail.source && (
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px]"
+                        style={{ background: "var(--neo-surface2)", color: "var(--neo-fg-muted)" }}
+                      >
+                        {nodeDetail.source}
+                      </span>
+                    )}
+                    {nodeDetail.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full px-2 py-0.5 text-[10px]"
+                        style={{ background: "var(--neo-surface2)", color: "var(--neo-fg-muted)" }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
 
-              {/* Content */}
-              <div className="px-4 py-4 prose prose-invert prose-sm max-w-none"
-                style={{ color: "var(--neo-fg-secondary)" }}
-              >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {nodeDetail.content.slice(0, 2000)}
-                </ReactMarkdown>
-                {nodeDetail.content.length > 2000 && (
-                  <button
-                    onClick={() => router.push(`/knowledge/${nodeDetail.id}`)}
-                    className="text-xs mt-2 transition-colors"
-                    style={{ color: "var(--neo-accent)" }}
+                  {/* Content */}
+                  <div className="px-4 py-4 prose prose-invert prose-sm max-w-none"
+                    style={{ color: "var(--neo-fg-secondary)" }}
                   >
-                    Read full content...
-                  </button>
-                )}
-              </div>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {nodeDetail.content.slice(0, 2000)}
+                    </ReactMarkdown>
+                    {nodeDetail.content.length > 2000 && (
+                      <button
+                        onClick={() => router.push(`/knowledge/${nodeDetail.id}`)}
+                        className="text-xs mt-2 transition-colors"
+                        style={{ color: "var(--neo-accent)" }}
+                      >
+                        Read full content...
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
 
               {/* Related nodes */}
               {relatedNodes.length > 0 && (

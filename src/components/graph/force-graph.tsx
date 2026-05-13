@@ -128,7 +128,6 @@ export function KnowledgeGraph({
       const isHovered = n.id === hoveredNode;
       const isConnected = highlighted.has(n.id);
       const dimmed = hasSelected && !isConnected;
-      const isPinned = n.fx !== undefined && n.fy !== undefined;
 
       const size = isSelected ? 7 : isHovered ? 6 : 5;
       const nodeColor = getNodeColor(n.type);
@@ -171,14 +170,6 @@ export function KnowledgeGraph({
       ctx.lineWidth = isSelected ? 1.5 : 0.5;
       ctx.stroke();
       ctx.globalAlpha = 1;
-
-      // Pinned indicator — small dot top-right
-      if (isPinned && !dimmed) {
-        ctx.beginPath();
-        ctx.arc(x + size - 1, y - size + 1, 1.5, 0, 2 * Math.PI);
-        ctx.fillStyle = isLight ? "#333" : "#fff";
-        ctx.fill();
-      }
 
       // Label
       const fontSize = Math.max(11 / globalScale, 1.5);
@@ -260,6 +251,7 @@ export function KnowledgeGraph({
           backgroundColor="transparent"
           nodeRelSize={1}
           nodeVal={() => 1}
+          nodeLabel={() => ""}
           nodeCanvasObject={paintNode}
           nodeCanvasObjectMode={() => "replace"}
           linkColor={(link) => {
