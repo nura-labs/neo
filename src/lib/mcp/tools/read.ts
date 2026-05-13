@@ -7,6 +7,7 @@ import {
   getNodeBySlug,
   getRelatedNodes,
   getWorkspaceById,
+  logActivity,
 } from "@/lib/db/queries";
 import { generateEmbedding } from "@/lib/knowledge/embeddings";
 import { edgeRelationships, knowledgeNodeTypes } from "@/lib/validators/knowledge";
@@ -95,6 +96,15 @@ export function registerReadTools(server: McpServer) {
       const nodes = queryEmbedding
         ? await hybridSearch(workspaceId, query, queryEmbedding, { type, source, tags })
         : await searchNodes(workspaceId, query, { type, source, tags });
+
+      logActivity({
+        workspaceId,
+        actorUserId: access.createdByUserId,
+        type: "search",
+        via: "mcp",
+        summary: `Searched "${query.slice(0, 80)}"`,
+        payload: { query, resultCount: nodes.length, type, source, tags },
+      });
 
       if (nodes.length === 0) {
         return {

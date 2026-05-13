@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedContext } from "@/lib/auth/api";
-import { searchNodes } from "@/lib/db/queries";
+import { logActivity, searchNodes } from "@/lib/db/queries";
 
 export async function GET(request: Request) {
   try {
@@ -14,6 +14,14 @@ export async function GET(request: Request) {
     const tags = url.searchParams.get("tags")?.split(",").filter(Boolean) ?? undefined;
 
     const nodes = await searchNodes(ctx.workspace.id, query, { type, source, tags });
+    logActivity({
+      workspaceId: ctx.workspace.id,
+      actorUserId: ctx.user.id,
+      type: "search",
+      via: "web",
+      summary: `Searched "${query.slice(0, 80)}"`,
+      payload: { query, resultCount: nodes.length, type, source, tags },
+    });
     return NextResponse.json({ nodes });
   } catch {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

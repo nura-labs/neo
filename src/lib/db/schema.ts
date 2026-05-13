@@ -193,6 +193,50 @@ export const cliDeviceSessions = pgTable(
 export type CliToken = typeof cliTokens.$inferSelect;
 export type CliDeviceSession = typeof cliDeviceSessions.$inferSelect;
 
+// ─── Activity Events ────────────────────────────────────
+//
+// Append-only feed of meaningful workspace events: searches run, nodes
+// created/updated, MCP tool calls, etc. Surfaces in Settings → Activity
+// and powers the dashboard "what's happening" panel.
+//
+// type taxonomy (free text for now, will tighten when we add filters):
+//   - search           (web or MCP search)
+//   - node.create      (a knowledge_node was added)
+//   - node.update      (a knowledge_node was edited)
+//   - node.delete
+//   - edge.create
+//   - member.join      (a user accepted an invite or got added)
+//   - invite.send
+//   - token.create
+//   - dream.run        (Dream Cycle ran)
+//
+// `actor` is the user that did it; `via` records the surface ('web', 'mcp',
+// 'cli', 'system') so the UI can show a small badge.
+
+export const activityEvents = pgTable(
+  "activity_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    type: text("type").notNull(),
+    via: text("via").notNull().default("web"),
+    summary: text("summary").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("activity_events_workspace_idx").on(table.workspaceId, table.createdAt),
+    index("activity_events_workspace_type_idx").on(table.workspaceId, table.type),
+  ]
+);
+
+export type ActivityEvent = typeof activityEvents.$inferSelect;
+
 // ─── Knowledge Graph ────────────────────────────────────
 //
 // `workspace_id` is added as nullable in migration 0004, backfilled in 0005,

@@ -8,6 +8,7 @@ import {
   apiTokens,
   cliTokens,
   cliDeviceSessions,
+  activityEvents,
   knowledgeNodes,
   knowledgeEdges,
   dreamSuggestions,
@@ -22,6 +23,7 @@ import type {
   ApiToken,
   CliToken,
   CliDeviceSession,
+  ActivityEvent,
   KnowledgeNode,
   KnowledgeEdge,
   DreamSuggestion,
@@ -487,6 +489,73 @@ export async function consumeCliDeviceSession(
   });
 }
 
+// ─── Activity events ─────────────────────────────────────
+
+export interface LogActivityInput {
+  workspaceId: string;
+  actorUserId?: string | null;
+  type:
+    | "search"
+    | "node.create"
+    | "node.update"
+    | "node.delete"
+    | "edge.create"
+    | "member.join"
+    | "invite.send"
+    | "token.create"
+    | "dream.run"
+    | string;
+  via?: "web" | "mcp" | "cli" | "system";
+  summary: string;
+  payload?: Record<string, unknown>;
+}
+
+/**
+ * Fire-and-forget activity logger. Failures are swallowed so they never break
+ * the calling request — the activity feed is observability, not consistency.
+ */
+export function logActivity(input: LogActivityInput): void {
+  db.insert(activityEvents)
+    .values({
+      workspaceId: input.workspaceId,
+      actorUserId: input.actorUserId ?? null,
+      type: input.type,
+      via: input.via ?? "web",
+      summary: input.summary,
+      payload: input.payload ?? {},
+    })
+    .execute()
+    .catch((err) => {
+      console.error("[activity] log failed:", err instanceof Error ? err.message : err);
+    });
+}
+
+export async function listRecentActivity(
+  workspaceId: string,
+  opts: { limit?: number; types?: string[] } = {}
+): Promise<Array<ActivityEvent & { actor: { username: string | null; name: string | null } | null }>> {
+  const limit = Math.min(opts.limit ?? 50, 200);
+  const where = opts.types?.length
+    ? and(
+        eq(activityEvents.workspaceId, workspaceId),
+        inArray(activityEvents.type, opts.types)
+      )
+    : eq(activityEvents.workspaceId, workspaceId);
+
+  const rows = await db
+    .select({
+      event: activityEvents,
+      actor: { username: users.username, name: users.name },
+    })
+    .from(activityEvents)
+    .leftJoin(users, eq(activityEvents.actorUserId, users.id))
+    .where(where)
+    .orderBy(desc(activityEvents.createdAt))
+    .limit(limit);
+
+  return rows.map((r) => ({ ...r.event, actor: r.actor }));
+}
+
 export async function touchApiTokenLastUsed(tokenId: string): Promise<void> {
   await db
     .update(apiTokens)
@@ -540,6 +609,14 @@ export async function createNode(
   // Generate embedding in background (non-blocking)
   updateEmbeddingInBackground(node.id, node.title, node.content);
 
+  logActivity({
+    workspaceId,
+    actorUserId: createdByUserId,
+    type: "node.create",
+    summary: `Created ${node.type} ${node.title}`,
+    payload: { nodeId: node.id, slug: node.slug, type: node.type, title: node.title },
+  });
+
   return node;
 }
 
@@ -580,6 +657,13 @@ export async function updateNode(
     updateEmbeddingInBackground(nodeId, node.title, node.content);
   }
 
+  logActivity({
+    workspaceId,
+    type: "node.update",
+    summary: `Updated ${node.type} ${node.title}`,
+    payload: { nodeId: node.id, slug: node.slug, type: node.type, title: node.title },
+  });
+
   return node;
 }
 
@@ -587,6 +671,23 @@ export async function deleteNode(
   nodeId: string,
   workspaceId: string
 ): Promise<boolean> {
+  // Capture the slug/title before delete so the activity log carries it.
+  const [existing] = await db
+    .select({
+      id: knowledgeNodes.id,
+      slug: knowledgeNodes.slug,
+      title: knowledgeNodes.title,
+      type: knowledgeNodes.type,
+    })
+    .from(knowledgeNodes)
+    .where(
+      and(
+        eq(knowledgeNodes.id, nodeId),
+        eq(knowledgeNodes.workspaceId, workspaceId)
+      )
+    )
+    .limit(1);
+
   const result = await db
     .delete(knowledgeNodes)
     .where(
@@ -596,7 +697,16 @@ export async function deleteNode(
       )
     )
     .returning({ id: knowledgeNodes.id });
-  return result.length > 0;
+  const ok = result.length > 0;
+  if (ok && existing) {
+    logActivity({
+      workspaceId,
+      type: "node.delete",
+      summary: `Deleted ${existing.type} ${existing.title}`,
+      payload: { nodeId: existing.id, slug: existing.slug, type: existing.type, title: existing.title },
+    });
+  }
+  return ok;
 }
 
 export async function getNodeById(

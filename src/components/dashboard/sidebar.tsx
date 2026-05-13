@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   FileText,
   GitFork,
+  Activity,
   Settings,
   LogOut,
   PanelLeftClose,
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/knowledge", label: "Knowledge", icon: FileText },
   { href: "/graph", label: "Graph", icon: GitFork },
+  { href: "/activity", label: "Activity", icon: Activity },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
