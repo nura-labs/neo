@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedContext, requireOwner } from "@/lib/auth/api";
-import { createApiToken, listApiTokens } from "@/lib/db/queries";
+import { getAuthenticatedContext } from "@/lib/auth/api";
+import {
+  createApiToken,
+  listApiTokens,
+  listApiTokensCreatedBy,
+} from "@/lib/db/queries";
 import { generateApiToken } from "@/lib/auth/token";
 import { z } from "zod";
 
@@ -8,6 +12,14 @@ const createSchema = z.object({
   name: z.string().min(1).max(80),
 });
 
+/**
+ * Token visibility:
+ *   - workspace owners see all tokens
+ *   - members see only the tokens they themselves created
+ *
+ * This mirrors GitHub's PAT model — anyone with access to the repo can mint
+ * their own token, but they can't see or revoke other people's tokens.
+ */
 export async function GET(request: Request) {
   let ctx;
   try {
@@ -16,8 +28,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
 
-  const tokens = await listApiTokens(ctx.workspace.id);
-  // Strip the hash before returning to the client
+  const tokens =
+    ctx.role === "owner"
+      ? await listApiTokens(ctx.workspace.id)
+      : await listApiTokensCreatedBy(ctx.workspace.id, ctx.user.id);
+
   return NextResponse.json({
     tokens: tokens.map((t) => ({
       id: t.id,
@@ -27,20 +42,23 @@ export async function GET(request: Request) {
       createdAt: t.createdAt,
       lastUsedAt: t.lastUsedAt,
       revokedAt: t.revokedAt,
+      createdByUserId: t.createdByUserId,
+      mine: t.createdByUserId === ctx.user.id,
     })),
   });
 }
 
+/**
+ * Any member of the workspace can mint a token for themselves. The token
+ * carries the same scopes the member has via membership (default
+ * ["read","write"]). Owner role is NOT required.
+ */
 export async function POST(request: Request) {
   let ctx;
   try {
     ctx = await getAuthenticatedContext(request);
-    requireOwner(ctx);
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Forbidden" },
-      { status: 403 }
-    );
+  } catch {
+    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
 
   let parsed;
@@ -60,7 +78,6 @@ export async function POST(request: Request) {
     scopes: ["read", "write"],
   });
 
-  // Plaintext is shown ONCE — frontend must surface a copy-now warning.
   return NextResponse.json(
     {
       token: { ...token, tokenHash: undefined },

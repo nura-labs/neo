@@ -354,6 +354,23 @@ export async function listApiTokens(workspaceId: string): Promise<ApiToken[]> {
     .orderBy(desc(apiTokens.createdAt));
 }
 
+export async function listApiTokensCreatedBy(
+  workspaceId: string,
+  userId: string
+): Promise<ApiToken[]> {
+  return db
+    .select()
+    .from(apiTokens)
+    .where(
+      and(
+        eq(apiTokens.workspaceId, workspaceId),
+        eq(apiTokens.createdByUserId, userId),
+        isNull(apiTokens.revokedAt)
+      )
+    )
+    .orderBy(desc(apiTokens.createdAt));
+}
+
 export async function revokeApiToken(
   workspaceId: string,
   tokenId: string
