@@ -18,29 +18,97 @@ import { join } from "path";
 var CONFIG_DIR = process.env.NEO_CONFIG_DIR ?? join(homedir(), ".neo");
 var CRED_FILE = join(CONFIG_DIR, "credentials.json");
 var DEFAULT_API_URL = process.env.NEO_API_URL ?? "https://neo.nura.sh";
-function loadCredentials() {
-  if (process.env.NEO_TOKEN) {
-    return {
-      apiUrl: process.env.NEO_API_URL ?? DEFAULT_API_URL,
-      token: process.env.NEO_TOKEN,
-      workspaceSlug: process.env.NEO_WORKSPACE ?? null,
-      workspaceName: null,
-      username: null,
-      email: null,
-      savedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-  }
+function isLegacyShape(raw) {
+  return typeof raw === "object" && raw !== null && "token" in raw && "profiles" in raw === false;
+}
+function readRaw() {
   if (!existsSync(CRED_FILE)) return null;
   try {
-    return JSON.parse(readFileSync(CRED_FILE, "utf-8"));
+    const txt = readFileSync(CRED_FILE, "utf-8").trim();
+    if (!txt) return null;
+    const parsed = JSON.parse(txt);
+    if (isLegacyShape(parsed)) {
+      const legacy = parsed;
+      if (!legacy.workspaceSlug) return null;
+      return {
+        activeSlug: legacy.workspaceSlug,
+        profiles: {
+          [legacy.workspaceSlug]: {
+            apiUrl: legacy.apiUrl,
+            token: legacy.token,
+            workspaceSlug: legacy.workspaceSlug,
+            workspaceName: legacy.workspaceName,
+            username: legacy.username,
+            email: legacy.email,
+            savedAt: legacy.savedAt
+          }
+        }
+      };
+    }
+    if (typeof parsed === "object" && parsed !== null && "profiles" in parsed) {
+      return parsed;
+    }
+    return null;
   } catch {
     return null;
   }
 }
-function saveCredentials(creds) {
+function ensureDir() {
   if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true, mode: 448 });
+}
+function loadAllCredentials() {
+  if (process.env.NEO_TOKEN) {
+    const slug = process.env.NEO_WORKSPACE ?? "env";
+    return {
+      activeSlug: slug,
+      profiles: {
+        [slug]: {
+          apiUrl: process.env.NEO_API_URL ?? DEFAULT_API_URL,
+          token: process.env.NEO_TOKEN,
+          workspaceSlug: slug,
+          workspaceName: null,
+          username: null,
+          email: null,
+          savedAt: (/* @__PURE__ */ new Date()).toISOString()
+        }
+      }
+    };
+  }
+  return readRaw() ?? { activeSlug: null, profiles: {} };
+}
+function loadCredentials() {
+  const all = loadAllCredentials();
+  if (!all.activeSlug) return null;
+  return all.profiles[all.activeSlug] ?? null;
+}
+function writeAllCredentials(creds) {
+  ensureDir();
   writeFileSync(CRED_FILE, JSON.stringify(creds, null, 2));
   chmodSync(CRED_FILE, 384);
+}
+function upsertProfile(p) {
+  const creds = loadAllCredentials();
+  creds.profiles[p.workspaceSlug] = p;
+  creds.activeSlug = p.workspaceSlug;
+  writeAllCredentials(creds);
+}
+function setActiveSlug(slug) {
+  const creds = loadAllCredentials();
+  if (!creds.profiles[slug]) return false;
+  creds.activeSlug = slug;
+  writeAllCredentials(creds);
+  return true;
+}
+function removeProfile(slug) {
+  const creds = loadAllCredentials();
+  if (!creds.profiles[slug]) return false;
+  delete creds.profiles[slug];
+  if (creds.activeSlug === slug) {
+    const remaining = Object.keys(creds.profiles);
+    creds.activeSlug = remaining[0] ?? null;
+  }
+  writeAllCredentials(creds);
+  return true;
 }
 function clearCredentials() {
   if (!existsSync(CRED_FILE)) return;
@@ -80,13 +148,15 @@ async function apiRequest(path, options = {}, optsCreds) {
 }
 async function apiRequestUnauth(apiUrl, path, options = {}) {
   const url = path.startsWith("http") ? path : `${apiUrl}${path}`;
+  const callerHeaders = options.headers ?? {};
+  const hasContentType = Object.keys(callerHeaders).some(
+    (k) => k.toLowerCase() === "content-type"
+  );
   const headers = {
     Accept: "application/json",
-    ...options.headers ?? {}
+    ...options.body && typeof options.body === "string" && !hasContentType ? { "Content-Type": "application/json" } : {},
+    ...callerHeaders
   };
-  if (options.body && typeof options.body === "string") {
-    headers["Content-Type"] = "application/json";
-  }
   const res = await fetch(url, { ...options, headers });
   const data = await res.json().catch(() => null);
   return { ok: res.ok, status: res.status, data };
@@ -175,27 +245,27 @@ function waitForCallback(port, expectedState, timeoutMs) {
       const state = url.searchParams.get("state");
       const errorParam = url.searchParams.get("error");
       if (errorParam) {
-        res.writeHead(400, { "Content-Type": "text/html" }).end(
-          `<!doctype html><body style="font-family:system-ui;padding:32px"><h2>Authorization failed</h2><p>${errorParam}</p><p>You can close this tab.</p></body>`
+        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" }).end(
+          `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui;padding:32px"><h2>Authorization failed</h2><p>${errorParam}</p><p>You can close this tab.</p></body></html>`
         );
         server.close();
         reject(new Error(`OAuth error: ${errorParam}`));
         return;
       }
       if (!code || state !== expectedState) {
-        res.writeHead(400, { "Content-Type": "text/html" }).end(
-          `<!doctype html><body style="font-family:system-ui;padding:32px"><h2>Invalid callback</h2><p>Missing code or state mismatch.</p></body>`
+        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" }).end(
+          `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui;padding:32px"><h2>Invalid callback</h2><p>Missing code or state mismatch.</p></body></html>`
         );
         server.close();
         reject(new Error("Invalid OAuth callback (missing code or state mismatch)"));
         return;
       }
-      res.writeHead(200, { "Content-Type": "text/html" }).end(
-        `<!doctype html><body style="font-family:system-ui;padding:48px;text-align:center;color:#111">
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(
+        `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui;padding:48px;text-align:center;color:#111">
           <h2 style="margin:0 0 12px">You're signed in</h2>
           <p style="color:#666;margin:0">Return to your terminal \u2014 Neo CLI is ready.</p>
           <script>setTimeout(() => window.close(), 1500)</script>
-        </body>`
+        </body></html>`
       );
       server.close();
       resolve({ code, state });
@@ -254,87 +324,88 @@ async function loginViaOAuth(apiUrl) {
     const description = tokenRes.data?.error_description ?? tokenRes.data?.error ?? `HTTP ${tokenRes.status}`;
     err(`Token exchange failed: ${description}`);
   }
-  return { token: tokenRes.data.access_token, apiUrl };
+  return {
+    token: tokenRes.data.access_token,
+    apiUrl,
+    workspace: tokenRes.data.workspace
+  };
 }
 
 // src/commands/auth.ts
 function authCommand() {
   const cmd = new Command("auth").description("Authenticate with Neo");
-  cmd.command("login").description("Open a browser and authorize the CLI").option("--api-url <url>", "Override Neo API URL", DEFAULT_API_URL).action(async (opts) => {
-    const { token, apiUrl } = await loginViaOAuth(opts.apiUrl);
-    const wsRes = await apiRequest(
-      "/api/workspaces",
-      {},
-      {
-        apiUrl,
-        token,
-        workspaceSlug: null,
-        workspaceName: null,
-        username: null,
-        email: null,
-        savedAt: (/* @__PURE__ */ new Date()).toISOString()
-      }
-    );
-    if (!wsRes.ok) {
-      err(`Could not list workspaces after login (status ${wsRes.status})`);
+  cmd.command("login").description("Open a browser and authorize the CLI for a workspace").option("--api-url <url>", "Override Neo API URL", DEFAULT_API_URL).action(async (opts) => {
+    const { token, apiUrl, workspace } = await loginViaOAuth(opts.apiUrl);
+    let ws = workspace;
+    if (!ws) {
+      const me2 = await apiRequestUnauth(apiUrl, "/api/whoami", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (me2.ok) ws = me2.data.workspace;
     }
-    const first = wsRes.data.workspaces[0];
-    if (!first) {
-      err("No workspaces found for this account.");
-    }
-    saveCredentials({
+    if (!ws) err("OAuth succeeded but the server did not return workspace info.");
+    const me = await apiRequestUnauth(apiUrl, "/api/whoami", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    upsertProfile({
       apiUrl,
       token,
-      workspaceSlug: first.slug,
-      workspaceName: first.name,
-      username: null,
-      email: null,
+      workspaceSlug: ws.slug,
+      workspaceName: ws.name,
+      workspacePlan: ws.plan,
+      username: me.ok ? me.data.user?.username ?? null : null,
+      email: me.ok ? me.data.user?.email ?? null : null,
       savedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
-    success(`Signed in. Active workspace: ${first.name} (${first.slug})`);
+    success(`Signed in. Active workspace: ${ws.name} (${ws.slug})`);
     info(`Credentials saved to ${credentialsPath()}`);
+    info(`Add another workspace later with \`neo auth login\` again \u2014 \`neo workspace use <slug>\` switches between them.`);
     output(
       {
         status: "ok",
         apiUrl,
-        activeWorkspace: { slug: first.slug, name: first.name },
-        workspaces: wsRes.data.workspaces.map((w) => ({
-          slug: w.slug,
-          name: w.name,
-          role: w.role
-        }))
+        activeWorkspace: { slug: ws.slug, name: ws.name }
       },
       () => ""
     );
   });
   cmd.command("status").description("Show current auth status").action(async () => {
-    const creds = loadCredentials();
-    if (!creds) {
-      output({ authenticated: false }, () => "Not authenticated");
+    const all = loadAllCredentials();
+    const active = loadCredentials();
+    if (!active) {
+      output({ authenticated: false, profiles: [] }, () => "Not authenticated");
       return;
     }
-    const me = await apiRequest("/api/workspaces");
-    const ok = me.ok;
+    const me = await apiRequest("/api/whoami");
     output(
       {
-        authenticated: ok,
-        apiUrl: creds.apiUrl,
-        activeWorkspace: creds.workspaceSlug,
-        tokenPrefix: creds.token.slice(0, 20) + "\u2026",
-        savedAt: creds.savedAt
+        authenticated: me.ok,
+        apiUrl: active.apiUrl,
+        activeWorkspace: active.workspaceSlug,
+        tokenPrefix: active.token.slice(0, 20) + "\u2026",
+        username: active.username,
+        email: active.email,
+        savedAt: active.savedAt,
+        profiles: Object.keys(all.profiles)
       },
       (v) => {
         const d = v;
-        return `authenticated: ${d.authenticated}
-apiUrl:         ${d.apiUrl}
-workspace:      ${d.activeWorkspace}
-token:          ${d.tokenPrefix}`;
+        return [
+          `authenticated: ${d.authenticated}`,
+          `apiUrl:        ${d.apiUrl}`,
+          `workspace:     ${d.activeWorkspace}`,
+          `user:          ${d.username ?? "?"} <${d.email ?? "?"}>`,
+          `token:         ${d.tokenPrefix}`,
+          `profiles:      ${d.profiles.join(", ") || "(none)"}`
+        ].join("\n");
       }
     );
   });
-  cmd.command("logout").description("Forget the stored credentials").action(() => {
+  cmd.command("logout").description("Forget all stored credentials").action(() => {
     clearCredentials();
-    success("Logged out");
+    success("Logged out (all profiles cleared)");
   });
   return cmd;
 }
@@ -342,52 +413,80 @@ token:          ${d.tokenPrefix}`;
 // src/commands/workspace.ts
 import { Command as Command2 } from "commander";
 function workspaceCommand() {
-  const cmd = new Command2("workspace").alias("ws").description("List, switch, or create workspaces");
-  cmd.command("list").description("List workspaces you belong to").action(async () => {
-    const res = await apiRequest("/api/workspaces");
-    if (!res.ok) err(`Failed to list workspaces (${res.status})`);
-    const creds = loadCredentials();
-    output(res.data.workspaces, (v) => {
-      const list = v;
-      return list.map((w) => {
-        const active = creds?.workspaceSlug === w.slug ? colors.green("\u25CF ") : "  ";
-        return `${active}${w.name}  ${colors.dim(`(${w.slug}, ${w.role})`)}`;
-      }).join("\n");
-    });
+  const cmd = new Command2("workspace").alias("ws").description("Manage local workspace profiles (each profile = one OAuth login)");
+  cmd.command("list").description("List workspaces you've authorized this CLI for").action(() => {
+    const creds = loadAllCredentials();
+    const profiles = Object.values(creds.profiles);
+    output(
+      profiles.map((p) => ({
+        slug: p.workspaceSlug,
+        name: p.workspaceName,
+        plan: p.workspacePlan,
+        email: p.email,
+        active: p.workspaceSlug === creds.activeSlug
+      })),
+      (v) => {
+        const list = v;
+        if (list.length === 0)
+          return colors.dim("No workspaces authorized. Run `neo auth login`.");
+        return list.map(
+          (p) => `${p.active ? colors.green("\u25CF ") : "  "}${p.name ?? p.slug}  ${colors.dim(`(${p.slug})`)}`
+        ).join("\n");
+      }
+    );
   });
-  cmd.command("use <slug>").description("Set the active workspace for subsequent commands").action(async (slug) => {
-    const res = await apiRequest("/api/workspaces");
-    if (!res.ok) err(`Failed to list workspaces (${res.status})`);
-    const target = res.data.workspaces.find((w) => w.slug === slug);
-    if (!target) err(`Workspace "${slug}" not found in your memberships`);
-    const creds = loadCredentials();
-    if (!creds) err("Not authenticated");
-    saveCredentials({
-      ...creds,
-      workspaceSlug: target.slug,
-      workspaceName: target.name
-    });
-    success(`Active workspace: ${target.name} (${target.slug})`);
-  });
-  cmd.command("create <name>").description("Create a new workspace").option("--slug <slug>", "Custom slug (autoderived from name if omitted)").action(async (name, opts) => {
-    const res = await apiRequest("/api/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name, slug: opts.slug })
-    });
-    if (!res.ok) {
-      const errorMsg = res.data?.error ?? `HTTP ${res.status}`;
-      err(`Could not create workspace: ${errorMsg}`);
+  cmd.command("use <slug>").description("Switch the active workspace among already-authorized profiles").action((slug) => {
+    const ok = setActiveSlug(slug);
+    if (!ok) {
+      const creds = loadAllCredentials();
+      const known = Object.keys(creds.profiles).join(", ") || "(none)";
+      err(
+        `No profile for "${slug}". Known profiles: ${known}
+To authorize a new workspace, run \`neo auth login\` and pick it in the browser.`
+      );
     }
-    const creds = loadCredentials();
-    if (creds) {
-      saveCredentials({
-        ...creds,
-        workspaceSlug: res.data.slug,
-        workspaceName: res.data.name
+    const active = loadCredentials();
+    success(`Active workspace: ${active?.workspaceName ?? slug} (${slug})`);
+  });
+  cmd.command("add").description("Authorize this CLI for another workspace (alias of `neo auth login`)").option("--api-url <url>", "Override Neo API URL").action(async (opts) => {
+    const baseUrl = opts.apiUrl ?? loadCredentials()?.apiUrl ?? "https://neo.nura.sh";
+    const { token, apiUrl, workspace } = await loginViaOAuth(baseUrl);
+    let ws = workspace;
+    if (!ws) {
+      const me = await apiRequestUnauth(apiUrl, "/api/whoami", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` }
       });
+      if (me.ok) ws = me.data.workspace;
     }
-    success(`Created ${res.data.name} (${res.data.slug}) and set as active`);
-    output(res.data, () => "");
+    if (!ws) err("OAuth succeeded but server did not return workspace info.");
+    upsertProfile({
+      apiUrl,
+      token,
+      workspaceSlug: ws.slug,
+      workspaceName: ws.name,
+      workspacePlan: ws.plan,
+      username: null,
+      email: null,
+      savedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+    success(`Added profile: ${ws.name} (${ws.slug}) \u2014 now active`);
+    info(`Switch later with \`neo workspace use <slug>\``);
+  });
+  cmd.command("remove <slug>").description("Forget the stored profile for a workspace").action((slug) => {
+    const ok = removeProfile(slug);
+    if (!ok) err(`No profile for "${slug}"`);
+    const remaining = loadCredentials();
+    success(`Removed profile ${slug}`);
+    if (remaining) info(`Active workspace now: ${remaining.workspaceSlug}`);
+    else info(`No active workspace. Run \`neo auth login\`.`);
+  });
+  cmd.command("create <name>").description("Create a NEW workspace on the server (you must already be signed in)").option("--slug <slug>", "Custom slug (autoderived from name if omitted)").action(async (name, opts) => {
+    err(
+      "Creating workspaces from the CLI requires a user-level token. Create a new workspace in the web UI (Settings \u2192 switcher \u2192 'New workspace'), then run `neo workspace add` to authorize this CLI for it."
+    );
+    void name;
+    void opts;
   });
   return cmd;
 }

@@ -111,6 +111,15 @@ export async function POST(request: Request) {
       access_token: generated.plaintext,
       token_type: "Bearer",
       scope: authCode.scopes.join(" "),
+      // Non-standard but useful: tell the caller which workspace the token
+      // is scoped to so a CLI doesn't have to make another auth-bearing
+      // request just to discover its own context.
+      workspace: {
+        id: workspace.id,
+        slug: workspace.slug,
+        name: workspace.name,
+        plan: workspace.plan,
+      },
     });
   } catch (error) {
     console.error("Token exchange error:", error);

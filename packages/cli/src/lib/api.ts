@@ -1,4 +1,4 @@
-import { type Credentials, loadCredentials } from "./config.js";
+import { type Profile, loadCredentials } from "./config.js";
 
 export interface ApiResponse<T> {
   ok: boolean;
@@ -12,7 +12,7 @@ export class NotAuthenticatedError extends Error {
   }
 }
 
-function buildHeaders(creds: Credentials, extra?: Record<string, string>): Record<string, string> {
+function buildHeaders(creds: Profile, extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${creds.token}`,
     Accept: "application/json",
@@ -25,7 +25,7 @@ function buildHeaders(creds: Credentials, extra?: Record<string, string>): Recor
 export async function apiRequest<T = unknown>(
   path: string,
   options: RequestInit = {},
-  optsCreds?: Credentials
+  optsCreds?: Profile
 ): Promise<ApiResponse<T>> {
   const creds = optsCreds ?? loadCredentials();
   if (!creds) throw new NotAuthenticatedError();
@@ -48,13 +48,19 @@ export async function apiRequestUnauth<T = unknown>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const url = path.startsWith("http") ? path : `${apiUrl}${path}`;
+  const callerHeaders = (options.headers as Record<string, string>) ?? {};
+  // Default to JSON body unless the caller explicitly chose a content type
+  // (e.g. application/x-www-form-urlencoded for the OAuth token endpoint).
+  const hasContentType = Object.keys(callerHeaders).some(
+    (k) => k.toLowerCase() === "content-type"
+  );
   const headers: Record<string, string> = {
     Accept: "application/json",
-    ...((options.headers as Record<string, string>) ?? {}),
+    ...(options.body && typeof options.body === "string" && !hasContentType
+      ? { "Content-Type": "application/json" }
+      : {}),
+    ...callerHeaders,
   };
-  if (options.body && typeof options.body === "string") {
-    headers["Content-Type"] = "application/json";
-  }
   const res = await fetch(url, { ...options, headers });
   const data = (await res.json().catch(() => null)) as T;
   return { ok: res.ok, status: res.status, data };

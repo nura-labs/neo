@@ -14,6 +14,12 @@ interface TokenResponse {
   access_token: string;
   token_type: string;
   scope: string;
+  workspace?: {
+    id: string;
+    slug: string;
+    name: string;
+    plan: string;
+  };
 }
 
 function base64url(buf: Buffer): string {
@@ -69,8 +75,8 @@ function waitForCallback(
       const errorParam = url.searchParams.get("error");
 
       if (errorParam) {
-        res.writeHead(400, { "Content-Type": "text/html" }).end(
-          `<!doctype html><body style="font-family:system-ui;padding:32px"><h2>Authorization failed</h2><p>${errorParam}</p><p>You can close this tab.</p></body>`
+        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" }).end(
+          `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui;padding:32px"><h2>Authorization failed</h2><p>${errorParam}</p><p>You can close this tab.</p></body></html>`
         );
         server.close();
         reject(new Error(`OAuth error: ${errorParam}`));
@@ -78,20 +84,20 @@ function waitForCallback(
       }
 
       if (!code || state !== expectedState) {
-        res.writeHead(400, { "Content-Type": "text/html" }).end(
-          `<!doctype html><body style="font-family:system-ui;padding:32px"><h2>Invalid callback</h2><p>Missing code or state mismatch.</p></body>`
+        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" }).end(
+          `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui;padding:32px"><h2>Invalid callback</h2><p>Missing code or state mismatch.</p></body></html>`
         );
         server.close();
         reject(new Error("Invalid OAuth callback (missing code or state mismatch)"));
         return;
       }
 
-      res.writeHead(200, { "Content-Type": "text/html" }).end(
-        `<!doctype html><body style="font-family:system-ui;padding:48px;text-align:center;color:#111">
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(
+        `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:system-ui;padding:48px;text-align:center;color:#111">
           <h2 style="margin:0 0 12px">You're signed in</h2>
           <p style="color:#666;margin:0">Return to your terminal — Neo CLI is ready.</p>
           <script>setTimeout(() => window.close(), 1500)</script>
-        </body>`
+        </body></html>`
       );
       server.close();
       resolve({ code, state });
@@ -109,6 +115,7 @@ function waitForCallback(
 export interface LoginResult {
   token: string;
   apiUrl: string;
+  workspace?: { id: string; slug: string; name: string; plan: string };
 }
 
 export async function loginViaOAuth(apiUrl: string): Promise<LoginResult> {
@@ -170,5 +177,9 @@ export async function loginViaOAuth(apiUrl: string): Promise<LoginResult> {
     err(`Token exchange failed: ${description}`);
   }
 
-  return { token: tokenRes.data.access_token, apiUrl };
+  return {
+    token: tokenRes.data.access_token,
+    apiUrl,
+    workspace: tokenRes.data.workspace,
+  };
 }
