@@ -211,13 +211,55 @@ export function TokensTab() {
         )}
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium">Connect</h3>
-        <CopyBlock
-          label="Claude Code"
-          value={`claude mcp add --transport http neo-${currentWorkspace.slug} ${mcpUrl} --header "Authorization: Bearer YOUR_TOKEN"`}
-        />
-        <CopyBlock label="Cursor / Codex (URL)" value={mcpUrl} />
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Connect with the Neo CLI <span className="neo-label" style={{ marginLeft: 6 }}>recommended</span></h3>
+          <p className="text-xs neo-text-muted">
+            One install. One login. Switch workspaces without re-auth. Configures MCP in every detected coding agent.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <span className="neo-label">1. Install</span>
+          <CopyBlock value="npm install -g @nuralabs/neo" />
+        </div>
+
+        <div className="space-y-2">
+          <span className="neo-label">2. Sign in (device flow, no copy-paste of tokens)</span>
+          <CopyBlock value="neo auth login" />
+        </div>
+
+        <div className="space-y-2">
+          <span className="neo-label">3. Connect MCP to your coding agents</span>
+          <CopyBlock value="neo mcp install claude-code" />
+          <p className="text-xs neo-text-muted">
+            Or <code className="font-mono">neo mcp install all</code> to configure every agent the CLI detects (Claude Code, Cursor, Windsurf, VS Code).
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <span className="neo-label">No Node? Standalone binary</span>
+          <CopyBlock
+            value={`curl -fsSL https://github.com/nura-labs/neo-cli/releases/latest/download/neo-darwin-arm64 -o /usr/local/bin/neo && chmod +x /usr/local/bin/neo`}
+          />
+        </div>
+
+        <div
+          className="pt-5 mt-5 space-y-3"
+          style={{ borderTop: "1px solid var(--neo-border)" }}
+        >
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium">Manual setup (without the CLI)</h3>
+            <p className="text-xs neo-text-muted">
+              Create a token above, then paste this command. The CLI does this automatically.
+            </p>
+          </div>
+          <CopyBlock
+            label="Claude Code"
+            value={`claude mcp add --transport http neo-${currentWorkspace.slug} ${mcpUrl} --header "Authorization: Bearer YOUR_TOKEN"`}
+          />
+          <CopyBlock label="Cursor / Windsurf / Codex (URL)" value={mcpUrl} />
+        </div>
       </div>
     </div>
   );
