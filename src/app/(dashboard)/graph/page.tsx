@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { KnowledgeGraph } from "@/components/graph/force-graph";
 import { apiFetch } from "@/lib/api";
 import { nodeTypeColors } from "@/lib/graph/colors";
-import { motion, AnimatePresence } from "framer-motion";
 import { X, ExternalLink } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -110,20 +109,16 @@ export default function GraphPage() {
         </div>
       </div>
 
-      {/* Preview panel */}
-      <AnimatePresence>
-        {selectedNodeId && (
-          <motion.aside
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 400, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="h-full overflow-hidden shrink-0"
-            style={{
-              background: "var(--neo-surface)",
-              borderLeft: "1px solid var(--neo-border)",
-            }}
-          >
+      {/* Preview panel — plain aside, no framer-motion (animation was hiding bugs) */}
+      {selectedNodeId && (
+        <aside
+          className="h-full shrink-0"
+          style={{
+            width: 400,
+            background: "var(--neo-surface)",
+            borderLeft: "1px solid var(--neo-border)",
+          }}
+        >
             <div className="h-full overflow-y-auto">
               {/* Panel header */}
               <div
@@ -250,9 +245,8 @@ export default function GraphPage() {
                 </div>
               )}
             </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
+        </aside>
+      )}
     </div>
   );
 }

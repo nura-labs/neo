@@ -99,26 +99,8 @@ export function KnowledgeGraph({
       }
     : data;
 
-  const connectedNodes = useCallback(
-    (nodeId: string | null) => {
-      if (!nodeId) return new Set<string>();
-      const connected = new Set<string>([nodeId]);
-      filteredData.links.forEach((link) => {
-        const sourceId = typeof link.source === "string" ? link.source : link.source.id;
-        const targetId = typeof link.target === "string" ? link.target : link.target.id;
-        if (sourceId === nodeId) connected.add(targetId);
-        if (targetId === nodeId) connected.add(sourceId);
-      });
-      return connected;
-    },
-    [filteredData.links]
-  );
-
-  // The "selected" state is what triggers the dramatic dim-others highlight.
-  // Hover just gets a subtle ring on the hovered node — Obsidian-style.
-  const highlighted = connectedNodes(selectedNodeId ?? null);
-  const hasSelected = selectedNodeId != null;
-
+  // No more dim-others. Click just opens the sidebar. Hover gets a subtle ring.
+  // Selected gets a subtle same-color stroke so you can see what's open in the panel.
   const paintNode = useCallback(
     (node: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const n = node as GraphNode;
@@ -126,75 +108,47 @@ export function KnowledgeGraph({
       const y = n.y ?? 0;
       const isSelected = n.id === selectedNodeId;
       const isHovered = n.id === hoveredNode;
-      const isConnected = highlighted.has(n.id);
-      const dimmed = hasSelected && !isConnected;
 
-      const size = isSelected ? 7 : isHovered ? 6 : 5;
+      const size = isSelected || isHovered ? 6 : 5;
       const nodeColor = getNodeColor(n.type);
 
-      // Glow ring for selected
-      if (isSelected) {
-        ctx.beginPath();
-        ctx.arc(x, y, size + 8, 0, 2 * Math.PI);
-        ctx.fillStyle = `${nodeColor}25`;
-        ctx.fill();
-      }
-      // Subtle hover ring (no dim of others)
-      if (isHovered && !isSelected) {
+      // Subtle ring on hover or selection
+      if (isHovered || isSelected) {
         ctx.beginPath();
         ctx.arc(x, y, size + 4, 0, 2 * Math.PI);
-        ctx.strokeStyle = `${nodeColor}66`;
+        ctx.strokeStyle = `${nodeColor}55`;
         ctx.lineWidth = 1;
         ctx.stroke();
       }
 
-      // Node circle
+      // Node circle — keep stroke subtle, no harsh black/white outlines
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
-      if (dimmed) {
-        // Soft fade — keep some color so the user still recognizes the type
-        ctx.globalAlpha = 0.25;
-        ctx.fillStyle = nodeColor;
-        ctx.strokeStyle = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.10)";
-      } else if (isSelected) {
-        ctx.fillStyle = nodeColor;
-        ctx.strokeStyle = isLight ? "#222" : "#fff";
-      } else if (isConnected && hasSelected) {
-        ctx.fillStyle = nodeColor;
-        ctx.strokeStyle = nodeColor;
-      } else {
-        ctx.fillStyle = nodeColor;
-        ctx.strokeStyle = isLight ? "rgba(0, 0, 0, 0.10)" : "rgba(255, 255, 255, 0.15)";
-      }
+      ctx.fillStyle = nodeColor;
+      ctx.strokeStyle = isSelected
+        ? nodeColor
+        : isLight ? "rgba(0, 0, 0, 0.10)" : "rgba(255, 255, 255, 0.15)";
       ctx.fill();
-      ctx.lineWidth = isSelected ? 1.5 : 0.5;
+      ctx.lineWidth = isSelected ? 1 : 0.5;
       ctx.stroke();
-      ctx.globalAlpha = 1;
 
       // Label
       const fontSize = Math.max(11 / globalScale, 1.5);
-      const showLabel = isSelected || isHovered || isConnected || globalScale > 1.5;
+      const showLabel = isSelected || isHovered || globalScale > 1.5;
       if (showLabel) {
         ctx.font = `${(isSelected || isHovered) ? "600 " : ""}${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-
-        if (dimmed) {
-          ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.20)" : "rgba(236, 233, 230, 0.25)";
-        } else if (isSelected || isHovered) {
-          ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.90)" : "rgba(236, 233, 230, 0.95)";
-        } else if (isConnected && hasSelected) {
-          ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.65)" : "rgba(236, 233, 230, 0.7)";
-        } else {
-          ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.40)" : "rgba(236, 233, 230, 0.45)";
-        }
+        ctx.fillStyle = (isSelected || isHovered)
+          ? isLight ? "rgba(0, 0, 0, 0.90)" : "rgba(236, 233, 230, 0.95)"
+          : isLight ? "rgba(0, 0, 0, 0.40)" : "rgba(236, 233, 230, 0.45)";
 
         let label = n.name;
         if (label.length > 30 && !(isSelected || isHovered)) label = label.substring(0, 28) + "...";
         ctx.fillText(label, x, y + size + 2);
       }
     },
-    [selectedNodeId, hoveredNode, highlighted, hasSelected, isLight]
+    [selectedNodeId, hoveredNode, isLight]
   );
 
   const handleNodeClick = useCallback(
@@ -254,30 +208,8 @@ export function KnowledgeGraph({
           nodeLabel={() => ""}
           nodeCanvasObject={paintNode}
           nodeCanvasObjectMode={() => "replace"}
-          linkColor={(link) => {
-            if (!hasSelected) return isLight ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.18)";
-            const sId = typeof (link as GraphLink).source === "string"
-              ? (link as GraphLink).source as string
-              : ((link as GraphLink).source as GraphNode).id;
-            const tId = typeof (link as GraphLink).target === "string"
-              ? (link as GraphLink).target as string
-              : ((link as GraphLink).target as GraphNode).id;
-            if (highlighted.has(sId) && highlighted.has(tId)) {
-              return isLight ? "rgba(0, 0, 0, 0.40)" : "rgba(255, 255, 255, 0.5)";
-            }
-            return isLight ? "rgba(0, 0, 0, 0.03)" : "rgba(255, 255, 255, 0.04)";
-          }}
-          linkWidth={(link) => {
-            if (!hasSelected) return 0.6;
-            const sId = typeof (link as GraphLink).source === "string"
-              ? (link as GraphLink).source as string
-              : ((link as GraphLink).source as GraphNode).id;
-            const tId = typeof (link as GraphLink).target === "string"
-              ? (link as GraphLink).target as string
-              : ((link as GraphLink).target as GraphNode).id;
-            if (highlighted.has(sId) && highlighted.has(tId)) return 1.5;
-            return 0.2;
-          }}
+          linkColor={() => isLight ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.18)"}
+          linkWidth={0.6}
           linkDirectionalArrowLength={0}
           linkDirectionalParticles={0}
           onNodeClick={handleNodeClick}
