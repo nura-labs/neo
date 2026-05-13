@@ -114,40 +114,53 @@ export function KnowledgeGraph({
     [filteredData.links]
   );
 
-  const activeNode = selectedNodeId || hoveredNode;
-  const highlighted = connectedNodes(activeNode);
-  const hasActive = activeNode !== null;
+  // The "selected" state is what triggers the dramatic dim-others highlight.
+  // Hover just gets a subtle ring on the hovered node — Obsidian-style.
+  const highlighted = connectedNodes(selectedNodeId ?? null);
+  const hasSelected = selectedNodeId != null;
 
   const paintNode = useCallback(
     (node: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const n = node as GraphNode;
       const x = n.x ?? 0;
       const y = n.y ?? 0;
-      const isActive = n.id === activeNode;
+      const isSelected = n.id === selectedNodeId;
+      const isHovered = n.id === hoveredNode;
       const isConnected = highlighted.has(n.id);
-      const dimmed = hasActive && !isConnected;
+      const dimmed = hasSelected && !isConnected;
+      const isPinned = n.fx !== undefined && n.fy !== undefined;
 
-      const size = isActive ? 7 : 5;
+      const size = isSelected ? 7 : isHovered ? 6 : 5;
       const nodeColor = getNodeColor(n.type);
 
-      // Glow for active node
-      if (isActive) {
+      // Glow ring for selected
+      if (isSelected) {
         ctx.beginPath();
         ctx.arc(x, y, size + 8, 0, 2 * Math.PI);
-        ctx.fillStyle = `${nodeColor}18`;
+        ctx.fillStyle = `${nodeColor}25`;
         ctx.fill();
       }
+      // Subtle hover ring (no dim of others)
+      if (isHovered && !isSelected) {
+        ctx.beginPath();
+        ctx.arc(x, y, size + 4, 0, 2 * Math.PI);
+        ctx.strokeStyle = `${nodeColor}66`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
 
-      // Node circle — solid opaque fill
+      // Node circle
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
       if (dimmed) {
-        ctx.fillStyle = isLight ? "#e8e8e8" : "#1a181d";
-        ctx.strokeStyle = isLight ? "#d0d0d0" : "#252328";
-      } else if (isActive) {
+        // Soft fade — keep some color so the user still recognizes the type
+        ctx.globalAlpha = 0.25;
         ctx.fillStyle = nodeColor;
-        ctx.strokeStyle = isLight ? "#333" : "#fff";
-      } else if (isConnected && hasActive) {
+        ctx.strokeStyle = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.10)";
+      } else if (isSelected) {
+        ctx.fillStyle = nodeColor;
+        ctx.strokeStyle = isLight ? "#222" : "#fff";
+      } else if (isConnected && hasSelected) {
         ctx.fillStyle = nodeColor;
         ctx.strokeStyle = nodeColor;
       } else {
@@ -155,31 +168,42 @@ export function KnowledgeGraph({
         ctx.strokeStyle = isLight ? "rgba(0, 0, 0, 0.10)" : "rgba(255, 255, 255, 0.15)";
       }
       ctx.fill();
-      ctx.lineWidth = isActive ? 1.5 : 0.5;
+      ctx.lineWidth = isSelected ? 1.5 : 0.5;
       ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // Pinned indicator — small dot top-right
+      if (isPinned && !dimmed) {
+        ctx.beginPath();
+        ctx.arc(x + size - 1, y - size + 1, 1.5, 0, 2 * Math.PI);
+        ctx.fillStyle = isLight ? "#333" : "#fff";
+        ctx.fill();
+      }
 
       // Label
       const fontSize = Math.max(11 / globalScale, 1.5);
-      const showLabel = isActive || isConnected || globalScale > 1.5;
-      if (showLabel && !dimmed) {
-        ctx.font = `${isActive ? "600 " : ""}${fontSize}px system-ui, sans-serif`;
+      const showLabel = isSelected || isHovered || isConnected || globalScale > 1.5;
+      if (showLabel) {
+        ctx.font = `${(isSelected || isHovered) ? "600 " : ""}${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
-        if (isActive) {
+        if (dimmed) {
+          ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.20)" : "rgba(236, 233, 230, 0.25)";
+        } else if (isSelected || isHovered) {
           ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.90)" : "rgba(236, 233, 230, 0.95)";
-        } else if (isConnected && hasActive) {
+        } else if (isConnected && hasSelected) {
           ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.65)" : "rgba(236, 233, 230, 0.7)";
         } else {
           ctx.fillStyle = isLight ? "rgba(0, 0, 0, 0.40)" : "rgba(236, 233, 230, 0.45)";
         }
 
         let label = n.name;
-        if (label.length > 30 && !isActive) label = label.substring(0, 28) + "...";
+        if (label.length > 30 && !(isSelected || isHovered)) label = label.substring(0, 28) + "...";
         ctx.fillText(label, x, y + size + 2);
       }
     },
-    [activeNode, highlighted, hasActive, isLight]
+    [selectedNodeId, hoveredNode, highlighted, hasSelected, isLight]
   );
 
   const handleNodeClick = useCallback(
@@ -239,7 +263,7 @@ export function KnowledgeGraph({
           nodeCanvasObject={paintNode}
           nodeCanvasObjectMode={() => "replace"}
           linkColor={(link) => {
-            if (!hasActive) return isLight ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.18)";
+            if (!hasSelected) return isLight ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.18)";
             const sId = typeof (link as GraphLink).source === "string"
               ? (link as GraphLink).source as string
               : ((link as GraphLink).source as GraphNode).id;
@@ -252,7 +276,7 @@ export function KnowledgeGraph({
             return isLight ? "rgba(0, 0, 0, 0.03)" : "rgba(255, 255, 255, 0.04)";
           }}
           linkWidth={(link) => {
-            if (!hasActive) return 0.6;
+            if (!hasSelected) return 0.6;
             const sId = typeof (link as GraphLink).source === "string"
               ? (link as GraphLink).source as string
               : ((link as GraphLink).source as GraphNode).id;
@@ -265,9 +289,13 @@ export function KnowledgeGraph({
           linkDirectionalArrowLength={0}
           linkDirectionalParticles={0}
           onNodeClick={handleNodeClick}
-          onNodeHover={(node) =>
-            setHoveredNode(node ? ((node as GraphNode).id ?? null) : null)
-          }
+          onNodeHover={(node) => {
+            setHoveredNode(node ? ((node as GraphNode).id ?? null) : null);
+            // Show pointer cursor on hover so it's obvious nodes are clickable
+            if (containerRef.current) {
+              containerRef.current.style.cursor = node ? "pointer" : "default";
+            }
+          }}
           onBackgroundClick={handleBackgroundClick}
           onNodeDragEnd={handleNodeDragEnd}
           d3AlphaDecay={0.02}
@@ -275,7 +303,6 @@ export function KnowledgeGraph({
           warmupTicks={100}
           cooldownTicks={300}
           ref={fgRef}
-          onEngineStop={() => fgRef.current?.zoomToFit(300, 40)}
           onRenderFramePost={() => {
             const fg = fgRef.current;
             if (fg && !forcesConfiguredRef.current) {
