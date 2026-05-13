@@ -43,6 +43,15 @@ export function registerReadTools(server: McpServer) {
         getWorkspaceById(workspaceId),
       ]);
 
+      logActivity({
+        workspaceId,
+        actorUserId: access.createdByUserId,
+        type: "overview.read",
+        via: "mcp",
+        summary: `Read workspace overview`,
+        payload: { source },
+      });
+
       const wsLabel = ws ? `${ws.name} (slug: ${ws.slug})` : workspaceSlug;
       const lines = [
         `## Knowledge Graph Overview — ${wsLabel}`,
@@ -150,6 +159,15 @@ export function registerReadTools(server: McpServer) {
           ? `\n\n## Related\n${related.map((r) => `- ${r.direction === "outgoing" ? "→" : "←"} **${r.node.title}** (${r.edge.relationship}) [slug: ${r.node.slug}]`).join("\n")}`
           : "";
 
+      logActivity({
+        workspaceId,
+        actorUserId: access.createdByUserId,
+        type: "node.read",
+        via: "mcp",
+        summary: `Read ${node.type} ${node.title}`,
+        payload: { nodeId: node.id, slug: node.slug, type: node.type },
+      });
+
       return {
         content: [
           {
@@ -182,6 +200,15 @@ export function registerReadTools(server: McpServer) {
       }
 
       const related = await getRelatedNodes(node.id, workspaceId, { relationship });
+
+      logActivity({
+        workspaceId,
+        actorUserId: access.createdByUserId,
+        type: "related.read",
+        via: "mcp",
+        summary: `Read related nodes of ${node.title}`,
+        payload: { nodeId: node.id, slug: node.slug, relationship, count: related.length },
+      });
 
       if (related.length === 0) {
         return {
@@ -219,6 +246,15 @@ export function registerReadTools(server: McpServer) {
         source,
         type: undefined,
         tags: undefined,
+      });
+
+      logActivity({
+        workspaceId,
+        actorUserId: access.createdByUserId,
+        type: "howto.read",
+        via: "mcp",
+        summary: `How-to "${topic.slice(0, 80)}"`,
+        payload: { topic, source, resultCount: nodes.length },
       });
 
       if (nodes.length === 0) {

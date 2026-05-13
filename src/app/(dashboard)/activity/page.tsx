@@ -35,16 +35,26 @@ const WINDOWS: { key: Window; label: string }[] = [
   { key: "365d", label: "1y" },
 ];
 
-const TYPE_LABELS: Record<string, string> = {
-  search: "Searches",
-  "node.create": "Nodes created",
-  "node.update": "Nodes updated",
-  "node.delete": "Nodes deleted",
-  "edge.create": "Edges created",
-  "member.join": "Members joined",
-  "invite.send": "Invites sent",
-  "token.create": "Tokens created",
-  "dream.run": "Dream cycles",
+// Billing categories — only via=mcp|cli count toward plan limits.
+const QUERY_TYPES = new Set(["search", "howto.read"]);
+const WRITE_TYPES = new Set(["node.create", "node.update", "node.delete", "edge.create"]);
+const READ_TYPES = new Set(["node.read", "overview.read", "related.read"]);
+const COUNTABLE_VIA = new Set<Via>(["mcp", "cli"]);
+
+const TYPE_LABEL: Record<string, string> = {
+  search: "Search",
+  "howto.read": "How-to",
+  "node.read": "Read node",
+  "overview.read": "Read overview",
+  "related.read": "Read related",
+  "node.create": "Create node",
+  "node.update": "Update node",
+  "node.delete": "Delete node",
+  "edge.create": "Create edge",
+  "member.join": "Member joined",
+  "invite.send": "Invite sent",
+  "token.create": "Token created",
+  "dream.run": "Dream cycle",
 };
 
 function fmtRelative(iso: string): string {
@@ -66,7 +76,7 @@ function ViaBadge({ via }: { via: Via }) {
   };
   return (
     <span
-      className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded"
+      className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
       style={{
         border: `1px solid ${colors[via] ?? "var(--neo-border)"}`,
         color: colors[via] ?? "var(--neo-fg-muted)",
@@ -80,10 +90,7 @@ function ViaBadge({ via }: { via: Via }) {
 function Sparkline({ data }: { data: { bucket: string; count: number }[] }) {
   if (data.length === 0) {
     return (
-      <div
-        className="h-16 flex items-center justify-center text-xs"
-        style={{ color: "var(--neo-fg-muted)" }}
-      >
+      <div className="h-16 flex items-center justify-center text-xs" style={{ color: "var(--neo-fg-muted)" }}>
         No data
       </div>
     );
@@ -92,33 +99,21 @@ function Sparkline({ data }: { data: { bucket: string; count: number }[] }) {
   const w = 600;
   const h = 60;
   const stepX = w / Math.max(data.length - 1, 1);
-  const points = data
-    .map((d, i) => `${i * stepX},${h - (d.count / max) * h}`)
-    .join(" ");
+  const points = data.map((d, i) => `${i * stepX},${h - (d.count / max) * h}`).join(" ");
   const area = `0,${h} ${points} ${w},${h}`;
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      className="w-full h-16"
-    >
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-16">
       <polygon points={area} fill="var(--neo-accent)" fillOpacity="0.1" />
-      <polyline
-        points={points}
-        fill="none"
-        stroke="var(--neo-accent)"
-        strokeWidth="1.5"
-        vectorEffect="non-scaling-stroke"
-      />
+      <polyline points={points} fill="none" stroke="var(--neo-accent)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
 
 export default function ActivityPage() {
   const { user, currentWorkspace } = useAuth();
-  const [window, setWindow] = useState<Window>("7d");
+  const [windowSel, setWindowSel] = useState<Window>("7d");
   const [activeType, setActiveType] = useState<string | "all">("all");
-  const [activeVia, setActiveVia] = useState<Via | "all">("all");
+  const [activeVia, setActiveVia] = useState<Via | "all" | "billable">("all");
   const [actor, setActor] = useState<"all" | "me">("all");
   const [data, setData] = useState<ActivityResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -126,28 +121,42 @@ export default function ActivityPage() {
   const fetchData = useCallback(async () => {
     if (!currentWorkspace) return;
     setLoading(true);
-    const params = new URLSearchParams({ window, limit: "100", group: "day" });
+    const params = new URLSearchParams({ window: windowSel, limit: "100", group: "day" });
     if (activeType !== "all") params.set("types", activeType);
-    if (activeVia !== "all") params.set("via", activeVia);
+    if (activeVia === "billable") params.set("via", "mcp,cli");
+    else if (activeVia !== "all") params.set("via", activeVia);
     if (actor !== "all") params.set("actor", actor);
     const res = await apiFetch<ActivityResponse>(`/api/activity?${params}`);
     if (res.ok) setData(res.data);
     setLoading(false);
-  }, [currentWorkspace, window, activeType, activeVia, actor]);
+  }, [currentWorkspace, windowSel, activeType, activeVia, actor]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
 
-  const stats = useMemo(() => {
+  // Compute the 3 counters: only events via mcp|cli count toward plan.
+  const counts = useMemo(() => {
     if (!data) return null;
-    return {
-      total: data.total,
-      searches: data.byType.search ?? 0,
-      nodesCreated: data.byType["node.create"] ?? 0,
-      nodesUpdated: data.byType["node.update"] ?? 0,
-    };
+    let queries = 0;
+    let writes = 0;
+    let reads = 0;
+    let webActions = 0;
+    for (const e of data.events) {
+      if (e.via === "web") {
+        webActions++;
+        continue;
+      }
+      if (!COUNTABLE_VIA.has(e.via)) continue;
+      if (QUERY_TYPES.has(e.type)) queries++;
+      else if (WRITE_TYPES.has(e.type)) writes++;
+      else if (READ_TYPES.has(e.type)) reads++;
+    }
+    // Counter from server-side byType is more accurate (covers >100 events), but
+    // for the visible feed window we use what we just received. Trade-off is
+    // acceptable for the demo — for billing we'd query directly.
+    return { queries, writes, reads, webActions };
   }, [data]);
 
   if (!currentWorkspace) {
@@ -160,19 +169,20 @@ export default function ActivityPage() {
         <div>
           <h1 className="neo-heading text-lg">Activity</h1>
           <p className="text-sm neo-text-muted">
-            Queries, knowledge changes, and tool calls in{" "}
-            <span style={{ color: "var(--neo-fg)" }}>{currentWorkspace.name}</span>
+            Usage in <span style={{ color: "var(--neo-fg)" }}>{currentWorkspace.name}</span>
+            {" · "}
+            <span className="text-xs">Only MCP and CLI calls count toward plan limits — web is shown for visibility.</span>
           </p>
         </div>
         <div className="flex gap-1">
           {WINDOWS.map((w) => (
             <button
               key={w.key}
-              onClick={() => setWindow(w.key)}
+              onClick={() => setWindowSel(w.key)}
               className="px-3 py-1 text-xs rounded-md"
               style={{
-                background: window === w.key ? "var(--neo-surface2)" : "transparent",
-                color: window === w.key ? "var(--neo-fg)" : "var(--neo-fg-muted)",
+                background: windowSel === w.key ? "var(--neo-surface2)" : "transparent",
+                color: windowSel === w.key ? "var(--neo-fg)" : "var(--neo-fg-muted)",
                 border: "1px solid var(--neo-border)",
               }}
             >
@@ -182,38 +192,50 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Billing counters — the 3 that matter */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="neo-surface rounded-xl p-4">
-          <p className="text-xs neo-text-muted">Total events</p>
-          <p className="text-2xl mt-1" style={{ color: "var(--neo-fg)" }}>
-            {stats?.total ?? "—"}
+          <div className="flex items-baseline justify-between">
+            <p className="text-xs neo-text-muted uppercase tracking-wider">Queries</p>
+            <p className="text-[10px] neo-text-muted">via mcp / cli</p>
+          </div>
+          <p className="text-3xl mt-2" style={{ color: "var(--neo-fg)" }}>
+            {counts?.queries ?? "—"}
           </p>
+          <p className="text-xs neo-text-muted mt-1">search + how-to</p>
         </div>
         <div className="neo-surface rounded-xl p-4">
-          <p className="text-xs neo-text-muted">Searches</p>
-          <p className="text-2xl mt-1" style={{ color: "var(--neo-fg)" }}>
-            {stats?.searches ?? "—"}
+          <div className="flex items-baseline justify-between">
+            <p className="text-xs neo-text-muted uppercase tracking-wider">Writes</p>
+            <p className="text-[10px] neo-text-muted">via mcp / cli</p>
+          </div>
+          <p className="text-3xl mt-2" style={{ color: "var(--neo-fg)" }}>
+            {counts?.writes ?? "—"}
           </p>
+          <p className="text-xs neo-text-muted mt-1">nodes + edges</p>
         </div>
         <div className="neo-surface rounded-xl p-4">
-          <p className="text-xs neo-text-muted">Nodes created</p>
-          <p className="text-2xl mt-1" style={{ color: "var(--neo-fg)" }}>
-            {stats?.nodesCreated ?? "—"}
+          <div className="flex items-baseline justify-between">
+            <p className="text-xs neo-text-muted uppercase tracking-wider">Reads</p>
+            <p className="text-[10px]" style={{ color: "var(--neo-fg-muted)" }}>free · unlimited</p>
+          </div>
+          <p className="text-3xl mt-2" style={{ color: "var(--neo-fg)" }}>
+            {counts?.reads ?? "—"}
           </p>
-        </div>
-        <div className="neo-surface rounded-xl p-4">
-          <p className="text-xs neo-text-muted">Nodes updated</p>
-          <p className="text-2xl mt-1" style={{ color: "var(--neo-fg)" }}>
-            {stats?.nodesUpdated ?? "—"}
-          </p>
+          <p className="text-xs neo-text-muted mt-1">node + overview + related</p>
         </div>
       </div>
 
       {/* Sparkline */}
       <div className="neo-surface rounded-xl p-4">
-        <p className="text-xs neo-text-muted mb-2">Events per day</p>
+        <p className="text-xs neo-text-muted mb-2">Events per day (all sources)</p>
         {data?.timeseries && <Sparkline data={data.timeseries} />}
+        <div className="flex justify-between text-[10px] neo-text-muted mt-1">
+          <span>Total events in window: {data?.total ?? 0}</span>
+          {counts !== null && counts.webActions > 0 && (
+            <span>· {counts.webActions} via web (not counted)</span>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -229,7 +251,7 @@ export default function ActivityPage() {
               border: "1px solid var(--neo-border)",
             }}
           >
-            All
+            All ({data?.total ?? 0})
           </button>
           {Object.entries(data?.byType ?? {}).map(([t, n]) => (
             <button
@@ -242,28 +264,30 @@ export default function ActivityPage() {
                 border: "1px solid var(--neo-border)",
               }}
             >
-              {TYPE_LABELS[t] ?? t}{" "}
-              <span className="opacity-60">{n}</span>
+              {TYPE_LABEL[t] ?? t} <span className="opacity-60">{n}</span>
             </button>
           ))}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="neo-label">Via</span>
-          {(["all", "web", "mcp", "cli"] as const).map((v) => (
+          <span className="neo-label">Surface</span>
+          {([
+            { v: "all", label: "All" },
+            { v: "billable", label: "Billable (MCP+CLI)" },
+            { v: "web", label: "Web" },
+            { v: "mcp", label: "MCP" },
+            { v: "cli", label: "CLI" },
+          ] as const).map((opt) => (
             <button
-              key={v}
-              onClick={() => setActiveVia(v)}
-              className="text-xs px-2 py-1 rounded-md uppercase"
+              key={opt.v}
+              onClick={() => setActiveVia(opt.v)}
+              className="text-xs px-2 py-1 rounded-md"
               style={{
-                background: activeVia === v ? "var(--neo-surface2)" : "transparent",
-                color: activeVia === v ? "var(--neo-fg)" : "var(--neo-fg-muted)",
+                background: activeVia === opt.v ? "var(--neo-surface2)" : "transparent",
+                color: activeVia === opt.v ? "var(--neo-fg)" : "var(--neo-fg-muted)",
                 border: "1px solid var(--neo-border)",
               }}
             >
-              {v}
-              {v !== "all" && (
-                <span className="ml-1 opacity-60">{data?.byVia[v] ?? 0}</span>
-              )}
+              {opt.label}
             </button>
           ))}
           <span className="neo-label ml-4">Actor</span>
@@ -294,9 +318,13 @@ export default function ActivityPage() {
         ) : (
           <ul className="space-y-2">
             {data.events.map((e) => {
-              const actorLabel =
-                e.actor?.name ?? e.actor?.username ?? e.actor?.email ?? "system";
+              const actorLabel = e.actor?.name ?? e.actor?.username ?? e.actor?.email ?? "system";
               const isMe = e.actor?.email?.toLowerCase() === user?.email?.toLowerCase();
+              const counts =
+                QUERY_TYPES.has(e.type) && COUNTABLE_VIA.has(e.via) ? "query"
+                : WRITE_TYPES.has(e.type) && COUNTABLE_VIA.has(e.via) ? "write"
+                : READ_TYPES.has(e.type) && COUNTABLE_VIA.has(e.via) ? "read"
+                : null;
               return (
                 <li
                   key={e.id}
@@ -313,7 +341,15 @@ export default function ActivityPage() {
                     <p className="text-xs neo-text-muted mt-0.5">
                       {actorLabel}
                       {isMe && " (you)"} · {fmtRelative(e.createdAt)} ·{" "}
-                      <span className="font-mono">{e.type}</span>
+                      <span className="font-mono">{TYPE_LABEL[e.type] ?? e.type}</span>
+                      {counts && (
+                        <span
+                          className="ml-2 text-[10px] uppercase tracking-wider"
+                          style={{ color: "var(--neo-accent)" }}
+                        >
+                          counts as {counts}
+                        </span>
+                      )}
                     </p>
                   </div>
                   <ViaBadge via={e.via} />
