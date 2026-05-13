@@ -13,7 +13,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "workspace", label: "Workspace" },
   { id: "members", label: "Members" },
-  { id: "tokens", label: "Connect & tokens" },
+  { id: "tokens", label: "Setup & tokens" },
 ];
 
 export default function SettingsPage() {
