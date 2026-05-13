@@ -98,19 +98,23 @@ export async function GET(request: Request) {
     .where(where)
     .groupBy(activityEvents.via);
 
-  // Optional timeseries
+  // Optional timeseries — node-postgres driver returns { rows: [...] } from db.execute
   let timeseries: { bucket: string; count: number }[] | undefined;
   if (group === "day" || group === "hour") {
-    const trunc = group === "hour" ? "hour" : "day";
-    const tsRows = await db.execute<{ bucket: string; count: number }>(sql`
-      SELECT date_trunc(${trunc}, ${activityEvents.createdAt}) AS bucket,
-             count(*)::int AS count
-      FROM ${activityEvents}
-      WHERE ${where}
-      GROUP BY 1
-      ORDER BY 1 ASC
-    `);
-    timeseries = (tsRows as unknown as { bucket: string; count: number }[]).map((r) => ({
+    const tsResult = await db
+      .select({
+        bucket:
+          group === "hour"
+            ? sql<string>`date_trunc('hour', ${activityEvents.createdAt})`.as("bucket")
+            : sql<string>`date_trunc('day', ${activityEvents.createdAt})`.as("bucket"),
+        count: sql<number>`count(*)::int`,
+      })
+      .from(activityEvents)
+      .where(where)
+      .groupBy(sql`bucket`)
+      .orderBy(sql`bucket asc`);
+
+    timeseries = tsResult.map((r) => ({
       bucket: typeof r.bucket === "string" ? r.bucket : new Date(r.bucket).toISOString(),
       count: r.count,
     }));
