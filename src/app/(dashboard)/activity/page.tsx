@@ -37,7 +37,7 @@ const WINDOWS: { key: Window; label: string }[] = [
 
 // Billing categories — only via=mcp|cli count toward plan limits.
 const QUERY_TYPES = new Set(["search", "howto.read"]);
-const WRITE_TYPES = new Set(["node.create", "node.update", "node.delete", "edge.create"]);
+const WRITE_TYPES = new Set(["node.create", "node.update", "node.delete"]);
 const READ_TYPES = new Set(["node.read", "overview.read", "related.read"]);
 const COUNTABLE_VIA = new Set<Via>(["mcp", "cli"]);
 
@@ -50,7 +50,6 @@ const TYPE_LABEL: Record<string, string> = {
   "node.create": "Create node",
   "node.update": "Update node",
   "node.delete": "Delete node",
-  "edge.create": "Create edge",
   "member.join": "Member joined",
   "invite.send": "Invite sent",
   "token.create": "Token created",

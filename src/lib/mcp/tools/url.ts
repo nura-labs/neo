@@ -59,19 +59,24 @@ export function registerUrlTool(server: McpServer) {
         };
       }
 
-      const node = await createNode(workspaceId, createdByUserId, {
-        type: type ?? "reference",
-        title: extractedTitle,
-        content: `Source: ${finalUrl}\n\n${content}`,
-        tags: tags ?? [],
-        source: `url:${finalUrl}`,
-        sourceMeta: {
-          url,
-          finalUrl,
-          fetchedAt: new Date().toISOString(),
+      const node = await createNode(
+        workspaceId,
+        createdByUserId,
+        {
+          type: type ?? "reference",
+          title: extractedTitle,
+          content: `Source: ${finalUrl}\n\n${content}`,
+          tags: tags ?? [],
+          source: `url:${finalUrl}`,
+          sourceMeta: {
+            url,
+            finalUrl,
+            fetchedAt: new Date().toISOString(),
+          },
+          relatedTo: [],
         },
-        relatedTo: [],
-      });
+        "mcp"
+      );
 
       return {
         content: [

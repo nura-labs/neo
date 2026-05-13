@@ -61,15 +61,20 @@ export function registerWriteTools(server: McpServer) {
         }
       }
 
-      const node = await createNode(workspaceId, createdByUserId, {
-        type,
-        title,
-        content,
-        tags: tags ?? [],
-        source,
-        sourceMeta: source_meta ?? {},
-        relatedTo: resolvedRelations,
-      });
+      const node = await createNode(
+        workspaceId,
+        createdByUserId,
+        {
+          type,
+          title,
+          content,
+          tags: tags ?? [],
+          source,
+          sourceMeta: source_meta ?? {},
+          relatedTo: resolvedRelations,
+        },
+        "mcp"
+      );
 
       let response = `Knowledge node created:\n- **ID:** ${node.id}\n- **Slug:** ${node.slug}\n- **Title:** ${node.title}\n- **Type:** ${node.type}`;
 
@@ -95,7 +100,7 @@ export function registerWriteTools(server: McpServer) {
     async ({ source_title, target_title, relationship }, { authInfo }) => {
       const access = requireMcpAccess(authInfo, "write");
       if (!access.ok) return access.response;
-      const { workspaceId } = access;
+      const { workspaceId, createdByUserId } = access;
 
       const sourceSlug = generateSlug(source_title);
       const targetSlug = generateSlug(target_title);
@@ -123,6 +128,8 @@ export function registerWriteTools(server: McpServer) {
         sourceId: sourceNode.id,
         targetId: targetNode.id,
         relationship,
+        via: "mcp",
+        actorUserId: createdByUserId,
       });
 
       if (!edge) {

@@ -50,6 +50,10 @@ export async function GET(request: Request) {
   const conditions = [
     eq(activityEvents.workspaceId, ctx.workspace.id),
     gte(activityEvents.createdAt, since),
+    // edge.create is no longer logged (it was noisy — every related_to in
+    // add_knowledge generated one). Filter out any historical rows so the
+    // UI doesn't surface them.
+    sql`${activityEvents.type} <> 'edge.create'`,
   ];
   if (typesCsv) {
     const types = typesCsv.split(",").map((s) => s.trim()).filter(Boolean);
