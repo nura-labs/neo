@@ -132,6 +132,67 @@ export const apiTokens = pgTable(
   ]
 );
 
+// ─── CLI Tokens (user-scoped) ───────────────────────────
+//
+// Separate from api_tokens: api_tokens are bound to ONE workspace (used by MCP
+// clients for per-workspace isolation). CLI tokens are bound to a USER and
+// grant access to any workspace the user is a member of via the X-Workspace
+// header per request. Format: `ncli-{hex64}`. Hashed sha256 like api_tokens.
+
+export const cliTokens = pgTable(
+  "cli_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenPrefix: text("token_prefix").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("cli_tokens_user_idx").on(table.userId),
+    index("cli_tokens_hash_idx").on(table.tokenHash),
+  ]
+);
+
+// ─── CLI Device Authorization Sessions ──────────────────
+//
+// Nia-style device flow. CLI POSTs to /api/cli/device/start which inserts a
+// row here with a short user_code (e.g. "ENNA-YASA"). User visits the
+// verification URL, signs in, confirms the code. /api/cli/device/exchange
+// returns the minted cli_token once `user_id` is filled in by /authorize.
+
+export const cliDeviceSessions = pgTable(
+  "cli_device_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userCode: text("user_code").notNull().unique(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    cliTokenId: uuid("cli_token_id").references(() => cliTokens.id, {
+      onDelete: "cascade",
+    }),
+    // Plaintext stashed briefly between confirm and exchange. Nulled on consume.
+    // (Cloud Run is multi-instance, so an in-process cache wouldn't survive
+    // routing — DB is the synchronization point.)
+    apiKeyPlaintext: text("api_key_plaintext"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("cli_device_sessions_code_idx").on(table.userCode),
+    index("cli_device_sessions_expires_idx").on(table.expiresAt),
+  ]
+);
+
+export type CliToken = typeof cliTokens.$inferSelect;
+export type CliDeviceSession = typeof cliDeviceSessions.$inferSelect;
+
 // ─── Knowledge Graph ────────────────────────────────────
 //
 // `workspace_id` is added as nullable in migration 0004, backfilled in 0005,

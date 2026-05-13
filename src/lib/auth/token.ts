@@ -51,3 +51,31 @@ export function hashToken(plaintext: string): string {
 export function generateInviteToken(): string {
   return randomBytes(24).toString("base64url");
 }
+
+/**
+ * CLI token format: `ncli-{64 hex chars}` (user-scoped, not workspace-scoped).
+ * Used by the Neo CLI: one token, switch workspaces per-request via X-Workspace.
+ */
+export function generateCliToken(): GeneratedToken {
+  const random = randomBytes(32).toString("hex");
+  const plaintext = `ncli-${random}`;
+  const prefix = `ncli-${random.slice(0, 8)}`;
+  const hash = hashToken(plaintext);
+  return { plaintext, prefix, hash };
+}
+
+/**
+ * Short, human-friendly device-flow code: 4-4 chars from an unambiguous alphabet.
+ * Example: "ENNA-YASA". Looks tidy on a TTY and can be typed in a browser if open()
+ * fails.
+ */
+export function generateDeviceUserCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I, O
+  const bytes = randomBytes(8);
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    out += alphabet[bytes[i]! % alphabet.length];
+    if (i === 3) out += "-";
+  }
+  return out;
+}

@@ -6,6 +6,8 @@ import {
   memberships,
   invites,
   apiTokens,
+  cliTokens,
+  cliDeviceSessions,
   knowledgeNodes,
   knowledgeEdges,
   dreamSuggestions,
@@ -18,6 +20,8 @@ import type {
   Membership,
   Invite,
   ApiToken,
+  CliToken,
+  CliDeviceSession,
   KnowledgeNode,
   KnowledgeEdge,
   DreamSuggestion,
@@ -358,6 +362,129 @@ export async function revokeApiToken(
     .where(and(eq(apiTokens.id, tokenId), eq(apiTokens.workspaceId, workspaceId)))
     .returning({ id: apiTokens.id });
   return result.length > 0;
+}
+
+// ─── CLI tokens (user-scoped) ─────────────────────────────
+
+export async function createCliToken(data: {
+  userId: string;
+  name: string;
+  tokenPrefix: string;
+  tokenHash: string;
+  expiresAt?: Date;
+}): Promise<CliToken> {
+  const [token] = await db.insert(cliTokens).values(data).returning();
+  return token;
+}
+
+export async function getCliTokenByHash(
+  tokenHash: string
+): Promise<{ token: CliToken; user: User } | null> {
+  const [row] = await db
+    .select({ token: cliTokens, user: users })
+    .from(cliTokens)
+    .innerJoin(users, eq(cliTokens.userId, users.id))
+    .where(and(eq(cliTokens.tokenHash, tokenHash), isNull(cliTokens.revokedAt)))
+    .limit(1);
+  if (!row) return null;
+  if (row.token.expiresAt && row.token.expiresAt < new Date()) return null;
+  return { token: row.token, user: row.user };
+}
+
+export async function listCliTokens(userId: string): Promise<CliToken[]> {
+  return db
+    .select()
+    .from(cliTokens)
+    .where(and(eq(cliTokens.userId, userId), isNull(cliTokens.revokedAt)))
+    .orderBy(desc(cliTokens.createdAt));
+}
+
+export async function revokeCliToken(userId: string, tokenId: string): Promise<boolean> {
+  const result = await db
+    .update(cliTokens)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(cliTokens.id, tokenId), eq(cliTokens.userId, userId)))
+    .returning({ id: cliTokens.id });
+  return result.length > 0;
+}
+
+export async function touchCliTokenLastUsed(tokenId: string): Promise<void> {
+  await db
+    .update(cliTokens)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(cliTokens.id, tokenId));
+}
+
+// ─── CLI device sessions (device flow) ────────────────────
+
+export async function createCliDeviceSession(data: {
+  userCode: string;
+  expiresAt: Date;
+}): Promise<CliDeviceSession> {
+  const [session] = await db.insert(cliDeviceSessions).values(data).returning();
+  return session;
+}
+
+export async function getCliDeviceSessionByCode(
+  userCode: string
+): Promise<CliDeviceSession | null> {
+  const [session] = await db
+    .select()
+    .from(cliDeviceSessions)
+    .where(eq(cliDeviceSessions.userCode, userCode))
+    .limit(1);
+  return session ?? null;
+}
+
+export async function attachUserToDeviceSession(
+  userCode: string,
+  userId: string,
+  cliTokenId: string,
+  apiKeyPlaintext: string
+): Promise<boolean> {
+  const result = await db
+    .update(cliDeviceSessions)
+    .set({ userId, cliTokenId, apiKeyPlaintext })
+    .where(
+      and(
+        eq(cliDeviceSessions.userCode, userCode),
+        isNull(cliDeviceSessions.userId),
+        isNull(cliDeviceSessions.consumedAt),
+        gt(cliDeviceSessions.expiresAt, new Date())
+      )
+    )
+    .returning({ id: cliDeviceSessions.id });
+  return result.length > 0;
+}
+
+/**
+ * Atomic consume: SELECT FOR UPDATE then UPDATE in one transaction. Concurrent
+ * callers race for the row lock — the loser sees `consumedAt` set and returns
+ * null (caller treats that as a 409). Plaintext is captured before the
+ * subsequent UPDATE nulls it.
+ */
+export async function consumeCliDeviceSession(
+  sessionId: string
+): Promise<{ plaintext: string } | null> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ plaintext: cliDeviceSessions.apiKeyPlaintext })
+      .from(cliDeviceSessions)
+      .where(
+        and(
+          eq(cliDeviceSessions.id, sessionId),
+          isNull(cliDeviceSessions.consumedAt)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!row || !row.plaintext) return null;
+    await tx
+      .update(cliDeviceSessions)
+      .set({ consumedAt: new Date(), apiKeyPlaintext: null })
+      .where(eq(cliDeviceSessions.id, sessionId));
+    return { plaintext: row.plaintext };
+  });
 }
 
 export async function touchApiTokenLastUsed(tokenId: string): Promise<void> {

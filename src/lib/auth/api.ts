@@ -2,13 +2,16 @@ import { adminAuth } from "./firebase-admin";
 import {
   createMembership,
   createWorkspace,
+  getCliTokenByHash,
   getMembership,
   getUserByFirebaseUid,
   getWorkspaceBySlug,
   listWorkspacesForUser,
+  touchCliTokenLastUsed,
 } from "@/lib/db/queries";
 import { generateUniqueUsername, generateUniqueWorkspaceSlug } from "@/lib/utils/username";
 import { createUser } from "@/lib/db/queries";
+import { hashToken } from "./token";
 import type { User, Workspace, Role } from "@/lib/db/schema";
 
 /**
@@ -32,7 +35,6 @@ async function ensureUserAndPersonalWorkspace(
     firebaseUid: decoded.uid,
   });
 
-  // Auto-create personal workspace
   const slug = await generateUniqueWorkspaceSlug(`${username}-personal`);
   const workspace = await createWorkspace({
     slug,
@@ -48,10 +50,25 @@ async function ensureUserAndPersonalWorkspace(
   return user;
 }
 
-async function verifyFirebaseAndEnsureUser(request: Request): Promise<User> {
+/**
+ * Resolve the bearer token into a User. Accepts two token types:
+ *  - Firebase ID tokens (used by the web UI)
+ *  - CLI tokens `ncli-...` (user-scoped, minted via device flow)
+ *
+ * NOTE: Workspace-scoped MCP tokens `sk-neo-...` are NOT accepted here —
+ * they're only valid against /api/mcp via a separate auth layer.
+ */
+async function resolveUserFromBearer(request: Request): Promise<User> {
   const authHeader = request.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) throw new Error("Not authenticated");
   const token = authHeader.slice(7);
+
+  if (token.startsWith("ncli-")) {
+    const result = await getCliTokenByHash(hashToken(token));
+    if (!result) throw new Error("Not authenticated");
+    touchCliTokenLastUsed(result.token.id).catch(() => {});
+    return result.user;
+  }
 
   let decoded;
   try {
@@ -72,7 +89,7 @@ async function verifyFirebaseAndEnsureUser(request: Request): Promise<User> {
  * the workspace-listing endpoint or the invite-acceptance endpoint.
  */
 export async function getAuthenticatedUser(request: Request): Promise<User> {
-  return verifyFirebaseAndEnsureUser(request);
+  return resolveUserFromBearer(request);
 }
 
 /**
@@ -87,7 +104,7 @@ export async function getAuthenticatedContext(request: Request): Promise<{
   workspace: Workspace;
   role: Role;
 }> {
-  const user = await verifyFirebaseAndEnsureUser(request);
+  const user = await resolveUserFromBearer(request);
 
   const url = new URL(request.url);
   const slugFromHeader = request.headers.get("X-Workspace");
