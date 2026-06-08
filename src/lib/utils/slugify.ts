@@ -1,4 +1,4 @@
-import { eq, and, like } from "drizzle-orm";
+import { eq, and, like, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { knowledgeNodes } from "@/lib/db/schema";
 
@@ -15,20 +15,23 @@ export function generateSlug(title: string): string {
 
 export async function generateUniqueSlug(
   workspaceId: string,
-  title: string
+  title: string,
+  tenantId?: string | null
 ): Promise<string> {
   const base = generateSlug(title);
   if (!base) return `node-${Date.now()}`;
 
+  const conditions = [
+    eq(knowledgeNodes.workspaceId, workspaceId),
+    like(knowledgeNodes.slug, `${base}%`),
+  ];
+  if (tenantId === null) conditions.push(isNull(knowledgeNodes.tenantId));
+  else if (tenantId) conditions.push(eq(knowledgeNodes.tenantId, tenantId));
+
   const existing = await db
     .select({ slug: knowledgeNodes.slug })
     .from(knowledgeNodes)
-    .where(
-      and(
-        eq(knowledgeNodes.workspaceId, workspaceId),
-        like(knowledgeNodes.slug, `${base}%`)
-      )
-    );
+    .where(and(...conditions));
 
   const slugs = new Set(existing.map((r) => r.slug));
 

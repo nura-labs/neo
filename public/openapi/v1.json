@@ -1,0 +1,298 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Neo Platform API",
+    "version": "1.0.0",
+    "description": "Neo Platform API for multi-tenant context management."
+  },
+  "servers": [{ "url": "/v1" }],
+  "security": [{ "bearerAuth": [] }],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Account API key (sk-neo-acct-...)"
+      }
+    },
+    "parameters": {
+      "NeoWorkspace": {
+        "name": "X-Neo-Workspace",
+        "in": "header",
+        "schema": { "type": "string" },
+        "description": "Platform workspace slug"
+      },
+      "NeoTenantId": {
+        "name": "X-Neo-Tenant-Id",
+        "in": "header",
+        "schema": { "type": "string" },
+        "description": "Tenant external ID or slug"
+      }
+    }
+  },
+  "paths": {
+    "/me": {
+      "get": {
+        "summary": "Get current account",
+        "responses": { "200": { "description": "Account details" } }
+      }
+    },
+    "/organization": {
+      "get": {
+        "summary": "Get organization",
+        "responses": { "200": { "description": "Organization details" } }
+      }
+    },
+    "/workspaces": {
+      "get": {
+        "summary": "List workspaces",
+        "responses": { "200": { "description": "Workspace list" } }
+      },
+      "post": {
+        "summary": "Create workspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "slug": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Workspace created" } }
+      }
+    },
+    "/workspaces/{workspace_id}": {
+      "get": {
+        "summary": "Get workspace",
+        "parameters": [
+          { "name": "workspace_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Workspace details" } }
+      },
+      "patch": {
+        "summary": "Update workspace",
+        "parameters": [
+          { "name": "workspace_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Workspace updated" } }
+      },
+      "delete": {
+        "summary": "Delete workspace",
+        "parameters": [
+          { "name": "workspace_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Workspace deleted" } }
+      }
+    },
+    "/tenants": {
+      "get": {
+        "summary": "List tenants",
+        "responses": { "200": { "description": "Tenant list" } }
+      },
+      "post": {
+        "summary": "Create tenant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["external_id", "name"],
+                "properties": {
+                  "external_id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "slug": { "type": "string" },
+                  "metadata": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Tenant created" } }
+      }
+    },
+    "/tenants/{tenant_id}": {
+      "get": {
+        "summary": "Get tenant",
+        "parameters": [
+          { "name": "tenant_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Tenant details" } }
+      },
+      "patch": {
+        "summary": "Update tenant",
+        "parameters": [
+          { "name": "tenant_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Tenant updated" } }
+      },
+      "delete": {
+        "summary": "Delete tenant",
+        "parameters": [
+          { "name": "tenant_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Tenant deleted" } }
+      }
+    },
+    "/keys": {
+      "get": {
+        "summary": "List account API keys",
+        "responses": { "200": { "description": "Key list" } }
+      },
+      "post": {
+        "summary": "Create account API key",
+        "responses": { "201": { "description": "Key created" } }
+      }
+    },
+    "/keys/{key_id}": {
+      "delete": {
+        "summary": "Revoke account API key",
+        "parameters": [
+          { "name": "key_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Key revoked" } }
+      }
+    },
+    "/context/nodes": {
+      "get": {
+        "summary": "List context nodes",
+        "parameters": [
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "responses": { "200": { "description": "Node list" } }
+      },
+      "post": {
+        "summary": "Create context node",
+        "parameters": [
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "responses": { "201": { "description": "Node created" } }
+      }
+    },
+    "/context/nodes/{node_id}": {
+      "get": {
+        "summary": "Get context node",
+        "parameters": [
+          { "name": "node_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "responses": { "200": { "description": "Node details" } }
+      },
+      "patch": {
+        "summary": "Update context node",
+        "parameters": [
+          { "name": "node_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "responses": { "200": { "description": "Node updated" } }
+      },
+      "delete": {
+        "summary": "Delete context node",
+        "parameters": [
+          { "name": "node_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "responses": { "200": { "description": "Node deleted" } }
+      }
+    },
+    "/context/nodes/by-slug/{slug}": {
+      "get": {
+        "summary": "Get context node by slug",
+        "parameters": [
+          { "name": "slug", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "responses": { "200": { "description": "Node details" } }
+      }
+    },
+    "/context/nodes/{node_id}/related": {
+      "get": {
+        "summary": "Get related nodes",
+        "parameters": [
+          { "name": "node_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "responses": { "200": { "description": "Related nodes" } }
+      }
+    },
+    "/context/search": {
+      "post": {
+        "summary": "Search context nodes",
+        "parameters": [
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                  "query": { "type": "string" },
+                  "top_k": { "type": "integer" },
+                  "mode": { "type": "string", "enum": ["hybrid", "semantic", "text"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Search results" } }
+      }
+    },
+    "/context/overview": {
+      "get": {
+        "summary": "Get context overview",
+        "parameters": [
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "responses": { "200": { "description": "Overview stats" } }
+      }
+    },
+    "/context/graph": {
+      "get": {
+        "summary": "Get context graph",
+        "parameters": [
+          { "$ref": "#/components/parameters/NeoWorkspace" },
+          { "$ref": "#/components/parameters/NeoTenantId" }
+        ],
+        "responses": { "200": { "description": "Graph data" } }
+      }
+    },
+    "/usage": {
+      "get": {
+        "summary": "Get usage summary",
+        "responses": { "200": { "description": "Usage aggregation" } }
+      }
+    },
+    "/usage/tenants/{tenant_id}": {
+      "get": {
+        "summary": "Get tenant usage",
+        "parameters": [
+          { "name": "tenant_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Tenant usage aggregation" } }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "OpenAPI specification",
+        "security": [],
+        "responses": { "200": { "description": "OpenAPI JSON" } }
+      }
+    }
+  }
+}

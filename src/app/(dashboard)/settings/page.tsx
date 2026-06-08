@@ -1,24 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { ProfileTab } from "@/components/settings/profile-tab";
 import { GeneralTab } from "@/components/settings/general-tab";
 import { MembersTab } from "@/components/settings/members-tab";
 import { TokensTab } from "@/components/settings/tokens-tab";
+import { PlatformTab } from "@/components/settings/platform-tab";
 
-type Tab = "profile" | "workspace" | "members" | "tokens";
+type Tab = "profile" | "workspace" | "members" | "tokens" | "platform";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "workspace", label: "Workspace" },
   { id: "members", label: "Members" },
   { id: "tokens", label: "Setup & tokens" },
+  { id: "platform", label: "Platform" },
 ];
 
-export default function SettingsPage() {
+function SettingsContent() {
   const { currentWorkspace } = useAuth();
-  const [tab, setTab] = useState<Tab>("profile");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(
+    tabParam === "platform" ? "platform" : "profile"
+  );
+
+  useEffect(() => {
+    if (tabParam === "platform") setTab("platform");
+  }, [tabParam]);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -59,7 +70,16 @@ export default function SettingsPage() {
         {tab === "workspace" && <GeneralTab />}
         {tab === "members" && <MembersTab />}
         {tab === "tokens" && <TokensTab />}
+        {tab === "platform" && <PlatformTab />}
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<p className="text-sm neo-text-muted">Loading…</p>}>
+      <SettingsContent />
+    </Suspense>
   );
 }

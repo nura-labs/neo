@@ -27,6 +27,14 @@ type ActivityResponse = {
   events: Event[];
 };
 
+type PersonalUsage = {
+  user_id: string;
+  period: { start: string; end: string };
+  totals: { operations: number; units: number };
+  by_operation: Record<string, number>;
+  by_via: Record<string, number>;
+};
+
 const WINDOWS: { key: Window; label: string }[] = [
   { key: "24h", label: "24h" },
   { key: "7d", label: "7d" },
@@ -115,6 +123,7 @@ export default function ActivityPage() {
   const [activeVia, setActiveVia] = useState<Via | "all" | "billable">("all");
   const [actor, setActor] = useState<"all" | "me">("all");
   const [data, setData] = useState<ActivityResponse | null>(null);
+  const [personalUsage, setPersonalUsage] = useState<PersonalUsage | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -127,6 +136,10 @@ export default function ActivityPage() {
     if (actor !== "all") params.set("actor", actor);
     const res = await apiFetch<ActivityResponse>(`/api/activity?${params}`);
     if (res.ok) setData(res.data);
+
+    const usageRes = await apiFetch<PersonalUsage>("/api/usage/personal?days=30");
+    if (usageRes.ok) setPersonalUsage(usageRes.data);
+
     setLoading(false);
   }, [currentWorkspace, windowSel, activeType, activeVia, actor]);
 
@@ -190,6 +203,41 @@ export default function ActivityPage() {
           ))}
         </div>
       </div>
+
+      {/* Personal usage summary */}
+      {personalUsage && (
+        <div className="neo-surface rounded-xl p-5 space-y-3">
+          <div className="flex items-baseline justify-between">
+            <p className="neo-label">Personal API usage (30d)</p>
+            <p className="text-xs neo-text-muted">
+              {new Date(personalUsage.period.start).toLocaleDateString()} –{" "}
+              {new Date(personalUsage.period.end).toLocaleDateString()}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs neo-text-muted">Operations</p>
+              <p className="text-2xl mt-1" style={{ color: "var(--neo-fg)" }}>
+                {personalUsage.totals.operations}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs neo-text-muted">Units</p>
+              <p className="text-2xl mt-1" style={{ color: "var(--neo-fg)" }}>
+                {personalUsage.totals.units}
+              </p>
+            </div>
+            {Object.entries(personalUsage.by_via).slice(0, 2).map(([via, units]) => (
+              <div key={via}>
+                <p className="text-xs neo-text-muted capitalize">{via}</p>
+                <p className="text-2xl mt-1" style={{ color: "var(--neo-fg)" }}>
+                  {units}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Billing counters — the 3 that matter */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
