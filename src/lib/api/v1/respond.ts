@@ -56,7 +56,7 @@ export function apiError(
         code,
         message,
         ...(param ? { param } : {}),
-        doc_url: `${DOCS_URL}#errors`,
+        doc_url: `${DOCS_URL}/errors`,
       },
     },
     { status, headers: apiHeaders(requestId) }

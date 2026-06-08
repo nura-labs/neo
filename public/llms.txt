@@ -4,7 +4,19 @@
 
 ## Documentation
 
-- Human-readable API reference: https://nura.sh/neo/docs
+- Introduction: https://nura.sh/neo/docs
+- Quickstart: https://nura.sh/neo/docs/quickstart
+- Authentication: https://nura.sh/neo/docs/authentication
+- Account: https://nura.sh/neo/docs/account
+- Workspaces: https://nura.sh/neo/docs/workspaces
+- Tenants: https://nura.sh/neo/docs/tenants
+- API Keys: https://nura.sh/neo/docs/keys
+- Context overview: https://nura.sh/neo/docs/context
+- Context search: https://nura.sh/neo/docs/context/search
+- Context nodes: https://nura.sh/neo/docs/context/nodes
+- Usage: https://nura.sh/neo/docs/usage
+- Errors: https://nura.sh/neo/docs/errors
+- Agent prompts: https://nura.sh/neo/docs/agents
 - OpenAPI 3.1 JSON: https://neo.nura.sh/v1/openapi.json
 - Platform dashboard: https://neo.nura.sh/platform
 
@@ -228,7 +240,7 @@ HTTP 400 invalid_request, 401 authentication_required, 403 forbidden, 404 not_fo
     "code": "invalid_request",
     "message": "Missing X-Neo-Workspace header.",
     "param": "X-Neo-Workspace",
-    "doc_url": "https://nura.sh/neo/docs#errors"
+    "doc_url": "https://nura.sh/neo/docs/errors"
   }
 }
 ```
