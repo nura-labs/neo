@@ -14,7 +14,8 @@ export interface SyncResult {
 export async function syncWikilinkEdges(
   workspaceId: string,
   nodeId: string,
-  content: string
+  content: string,
+  tenantId?: string | null
 ): Promise<SyncResult> {
   const wikilinks = parseWikilinks(content);
 
@@ -34,7 +35,7 @@ export async function syncWikilinkEdges(
 
   for (const link of wikilinks) {
     const slug = generateSlug(link.target);
-    const targetNode = await getNodeBySlug(slug, workspaceId);
+    const targetNode = await getNodeBySlug(slug, workspaceId, tenantId);
 
     if (!targetNode || targetNode.id === nodeId) {
       if (!targetNode) unresolved.push(link.target);
