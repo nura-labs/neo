@@ -374,7 +374,7 @@ export const knowledgeNodes = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "set null" }),
