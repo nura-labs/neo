@@ -64,6 +64,13 @@
       "when": 1778800000000,
       "tag": "0008_platform_infra",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778900000000,
+      "tag": "0009_tenant_scoped_slugs",
+      "breakpoints": true
     }
   ]
 }

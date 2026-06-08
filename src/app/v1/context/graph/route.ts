@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     request,
     { scope: "read", requireWorkspace: true, requireTenant: true },
     async (ctx, requestId) => {
-      const graph = await getGraphData(ctx.workspace!.id);
+      const graph = await getGraphData(ctx.workspace!.id, ctx.tenant!.id);
 
       logPlatformApiUsage(ctx, "api.request");
 

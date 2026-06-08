@@ -18,7 +18,10 @@ export async function GET(
       const url = new URL(request.url);
       const relationship = url.searchParams.get("relationship") ?? undefined;
 
-      const related = await getRelatedNodes(node_id, ctx.workspace!.id, { relationship });
+      const related = await getRelatedNodes(node_id, ctx.workspace!.id, {
+        relationship,
+        tenantId: ctx.tenant!.id,
+      });
 
       logPlatformApiUsage(ctx, "related.read");
 

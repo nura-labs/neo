@@ -628,19 +628,23 @@ export async function createNode(
 
   if (relatedTo && relatedTo.length > 0) {
     await Promise.all(
-      relatedTo.map((rel) =>
-        createEdge({
+      relatedTo.map(async (rel) => {
+        if (tenantId !== undefined) {
+          const target = await getNodeById(rel.id, workspaceId, tenantId);
+          if (!target) return;
+        }
+        return createEdge({
           workspaceId,
           sourceId: node.id,
           targetId: rel.id,
           relationship: rel.relationship,
-        })
-      )
+        });
+      })
     );
   }
 
   // Auto-generate edges from [[wikilinks]] in content
-  await syncWikilinkEdges(workspaceId, node.id, node.content);
+  await syncWikilinkEdges(workspaceId, node.id, node.content, tenantId ?? null);
 
   // Generate embedding in background (non-blocking)
   updateEmbeddingInBackground(node.id, node.title, node.content);
@@ -697,7 +701,7 @@ export async function updateNode(
 
   // Re-sync wikilink edges when content changes
   if (input.content) {
-    await syncWikilinkEdges(workspaceId, nodeId, input.content);
+    await syncWikilinkEdges(workspaceId, nodeId, input.content, tenantId ?? node.tenantId);
   }
 
   // Regenerate embedding if title or content changed
@@ -1072,17 +1076,43 @@ export async function getOverview(
 
   const nodeWhere = and(...nodeConditions);
 
+  const tenantEdgeCountCondition =
+    filters?.tenantId !== undefined
+      ? and(
+          eq(knowledgeEdges.workspaceId, workspaceId),
+          sql`exists (
+            select 1 from ${knowledgeNodes} s
+            where s.id = ${knowledgeEdges.sourceId}
+              and s.workspace_id = ${workspaceId}
+              and ${
+                filters.tenantId === null
+                  ? sql`s.tenant_id is null`
+                  : sql`s.tenant_id = ${filters.tenantId}`
+              }
+          )`,
+          sql`exists (
+            select 1 from ${knowledgeNodes} t
+            where t.id = ${knowledgeEdges.targetId}
+              and t.workspace_id = ${workspaceId}
+              and ${
+                filters.tenantId === null
+                  ? sql`t.tenant_id is null`
+                  : sql`t.tenant_id = ${filters.tenantId}`
+              }
+          )`
+        )
+      : eq(knowledgeEdges.workspaceId, workspaceId);
+
   const [nodeCount, edgeCount, typeBreakdown, sourceBreakdown, recentNodes] =
     await Promise.all([
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(knowledgeNodes)
         .where(nodeWhere),
-      // Edges now have workspace_id directly; no need to join through nodes
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(knowledgeEdges)
-        .where(eq(knowledgeEdges.workspaceId, workspaceId)),
+        .where(tenantEdgeCountCondition),
       db
         .select({
           type: knowledgeNodes.type,
@@ -1200,7 +1230,7 @@ export async function deleteEdge(
 export async function getRelatedNodes(
   nodeId: string,
   workspaceId: string,
-  filters?: { relationship?: string }
+  filters?: { relationship?: string; tenantId?: string | null }
 ): Promise<
   { node: KnowledgeNode; edge: KnowledgeEdge; direction: "outgoing" | "incoming" }[]
 > {
@@ -1214,17 +1244,24 @@ export async function getRelatedNodes(
     incomingConditions.push(eq(knowledgeEdges.relationship, filters.relationship));
   }
 
+  const tenantNodeConditions: ReturnType<typeof eq>[] = [];
+  if (filters?.tenantId === null) {
+    tenantNodeConditions.push(isNull(knowledgeNodes.tenantId));
+  } else if (filters?.tenantId) {
+    tenantNodeConditions.push(eq(knowledgeNodes.tenantId, filters.tenantId));
+  }
+
   const [outgoing, incoming] = await Promise.all([
     db
       .select({ node: knowledgeNodes, edge: knowledgeEdges })
       .from(knowledgeEdges)
       .innerJoin(knowledgeNodes, eq(knowledgeEdges.targetId, knowledgeNodes.id))
-      .where(and(...outgoingConditions)),
+      .where(and(...outgoingConditions, ...tenantNodeConditions)),
     db
       .select({ node: knowledgeNodes, edge: knowledgeEdges })
       .from(knowledgeEdges)
       .innerJoin(knowledgeNodes, eq(knowledgeEdges.sourceId, knowledgeNodes.id))
-      .where(and(...incomingConditions)),
+      .where(and(...incomingConditions, ...tenantNodeConditions)),
   ]);
 
   return [
@@ -1235,7 +1272,11 @@ export async function getRelatedNodes(
 
 // ─── Graph Data ───────────────────────────────────────────
 
-export async function getGraphData(workspaceId: string) {
+export async function getGraphData(workspaceId: string, tenantId?: string | null) {
+  const nodeConditions = [eq(knowledgeNodes.workspaceId, workspaceId)];
+  if (tenantId === null) nodeConditions.push(isNull(knowledgeNodes.tenantId));
+  else if (tenantId) nodeConditions.push(eq(knowledgeNodes.tenantId, tenantId));
+
   const [nodes, edges] = await Promise.all([
     db
       .select({
@@ -1246,7 +1287,7 @@ export async function getGraphData(workspaceId: string) {
         tags: knowledgeNodes.tags,
       })
       .from(knowledgeNodes)
-      .where(eq(knowledgeNodes.workspaceId, workspaceId)),
+      .where(and(...nodeConditions)),
     db
       .select({
         id: knowledgeEdges.id,
@@ -1259,8 +1300,13 @@ export async function getGraphData(workspaceId: string) {
       .where(eq(knowledgeEdges.workspaceId, workspaceId)),
   ]);
 
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const scopedEdges = edges.filter(
+    (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+  );
+
   const edgeCounts = new Map<string, number>();
-  for (const edge of edges) {
+  for (const edge of scopedEdges) {
     edgeCounts.set(edge.sourceId, (edgeCounts.get(edge.sourceId) ?? 0) + 1);
     edgeCounts.set(edge.targetId, (edgeCounts.get(edge.targetId) ?? 0) + 1);
   }
@@ -1273,7 +1319,7 @@ export async function getGraphData(workspaceId: string) {
       source: n.source,
       val: Math.max(1, edgeCounts.get(n.id) ?? 0),
     })),
-    links: edges.map((e) => ({
+    links: scopedEdges.map((e) => ({
       source: e.sourceId,
       target: e.targetId,
       name: e.relationship,
