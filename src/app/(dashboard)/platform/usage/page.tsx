@@ -27,7 +27,12 @@ export default function PlatformUsagePage() {
   }, [days]);
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div>
+        <h1 className="neo-heading text-2xl">Usage</h1>
+        <p className="text-sm neo-text-muted mt-2">Platform API consumption for your organization.</p>
+      </div>
+
       <div className="flex items-center gap-2">
         {DAY_OPTIONS.map((d) => (
           <button

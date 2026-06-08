@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthenticatedUser } from "@/lib/auth/api";
 import { getWorkspaceBySlug } from "@/lib/db/queries";
-import {
-  getPlatformOrgByUserId,
-  listPlatformWorkspaces,
-  createPlatformWorkspace,
-} from "@/lib/platform/queries";
+import { createPlatformWorkspace, listPlatformWorkspaces } from "@/lib/platform/queries";
 import { generateSlug } from "@/lib/utils/slugify";
+import {
+  getWorkspacePlatformContext,
+  handleWorkspacePlatformError,
+} from "@/lib/platform/web-auth";
+import { getAuthenticatedUser } from "@/lib/auth/api";
 
 const createSchema = z.object({
   name: z.string().min(1).max(80),
@@ -21,13 +21,7 @@ const createSchema = z.object({
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthenticatedUser(request);
-    const org = await getPlatformOrgByUserId(user.id);
-
-    if (!org) {
-      return NextResponse.json({ error: "Platform not enabled" }, { status: 404 });
-    }
-
+    const { org } = await getWorkspacePlatformContext(request);
     const workspaces = await listPlatformWorkspaces(org.id);
 
     return NextResponse.json({
@@ -41,7 +35,11 @@ export async function GET(request: Request) {
         updated_at: ws.updatedAt,
       })),
     });
-  } catch {
+  } catch (err) {
+    const handled = handleWorkspacePlatformError(err);
+    if (handled) {
+      return NextResponse.json({ error: handled.error }, { status: handled.status });
+    }
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 }
@@ -54,12 +52,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const org = await getPlatformOrgByUserId(user.id);
-  if (!org) {
-    return NextResponse.json({ error: "Platform not enabled" }, { status: 404 });
-  }
-
   try {
+    const { org } = await getWorkspacePlatformContext(request);
     const body = await request.json();
     const input = createSchema.parse(body);
 
@@ -91,6 +85,10 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
+    const handled = handleWorkspacePlatformError(error);
+    if (handled) {
+      return NextResponse.json({ error: handled.error }, { status: handled.status });
+    }
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }

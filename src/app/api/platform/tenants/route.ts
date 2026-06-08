@@ -1,21 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthenticatedUser } from "@/lib/auth/api";
 import { createTenantSchema } from "@/lib/api/v1/validators";
+import { createTenant, listTenants } from "@/lib/platform/queries";
 import {
-  createTenant,
-  getPlatformOrgByUserId,
-  listTenants,
-} from "@/lib/platform/queries";
+  getWorkspacePlatformContext,
+  handleWorkspacePlatformError,
+} from "@/lib/platform/web-auth";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthenticatedUser(request);
-    const org = await getPlatformOrgByUserId(user.id);
-
-    if (!org) {
-      return NextResponse.json({ error: "Platform not enabled" }, { status: 404 });
-    }
+    const { org } = await getWorkspacePlatformContext(request);
 
     const url = new URL(request.url);
     const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10) || 50, 100);
@@ -35,25 +29,18 @@ export async function GET(request: Request) {
       })),
       total,
     });
-  } catch {
+  } catch (err) {
+    const handled = handleWorkspacePlatformError(err);
+    if (handled) {
+      return NextResponse.json({ error: handled.error }, { status: handled.status });
+    }
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 }
 
 export async function POST(request: Request) {
-  let user;
   try {
-    user = await getAuthenticatedUser(request);
-  } catch {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  const org = await getPlatformOrgByUserId(user.id);
-  if (!org) {
-    return NextResponse.json({ error: "Platform not enabled" }, { status: 404 });
-  }
-
-  try {
+    const { org } = await getWorkspacePlatformContext(request);
     const body = await request.json();
     const input = createTenantSchema.parse(body);
 
@@ -78,6 +65,10 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
+    const handled = handleWorkspacePlatformError(error);
+    if (handled) {
+      return NextResponse.json({ error: handled.error }, { status: handled.status });
+    }
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }

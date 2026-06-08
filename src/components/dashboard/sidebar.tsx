@@ -7,7 +7,6 @@ import { useAuth } from "@/contexts/auth-context";
 import { usePlatform } from "@/contexts/platform-context";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
 import { DOCS_URL } from "@/lib/constants/urls";
 import {
   LayoutDashboard,
@@ -24,7 +23,6 @@ import {
   Key,
   BarChart3,
   BookOpen,
-  Layers,
 } from "lucide-react";
 
 const personalNavItems = [
@@ -37,10 +35,10 @@ const personalNavItems = [
 
 const platformNavItems = [
   { href: "/platform", label: "Overview", icon: LayoutDashboard },
-  { href: "/platform/workspaces", label: "Workspaces", icon: Layers },
   { href: "/platform/tenants", label: "Tenants", icon: Users },
   { href: "/platform/keys", label: "API Keys", icon: Key },
   { href: "/platform/usage", label: "Usage", icon: BarChart3 },
+  { href: "/platform/settings", label: "Settings", icon: Settings },
   { href: DOCS_URL, label: "Docs", icon: BookOpen, external: true },
 ];
 
@@ -70,7 +68,7 @@ export function Sidebar() {
   const isActive = (href: string) =>
     href === "/" || href === "/platform"
       ? pathname === href
-      : pathname.startsWith(href);
+      : pathname === href || pathname.startsWith(`${href}/`);
 
   const navItems = mode === "platform" ? platformNavItems : personalNavItems;
   const photoURL = user?.photoURL;
@@ -115,7 +113,7 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Mode switcher */}
+      {/* Mode switcher — only when current workspace has Platform enabled */}
       {isPlatformEnabled && !collapsed && (
         <div className="px-3 pt-3">
           <div
@@ -157,13 +155,6 @@ export function Sidebar() {
           >
             <Building2 size={16} />
           </button>
-        </div>
-      )}
-
-      {/* Workspace switcher — personal mode only */}
-      {mode === "personal" && (
-        <div className={`px-3 pt-3 ${collapsed ? "flex justify-center" : ""}`}>
-          <WorkspaceSwitcher collapsed={collapsed} />
         </div>
       )}
 

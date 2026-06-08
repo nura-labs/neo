@@ -65,7 +65,14 @@ export default function PlatformKeysPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div>
+        <h1 className="neo-heading text-2xl">API Keys</h1>
+        <p className="text-sm neo-text-muted mt-2">
+          Account keys for the Platform API (<code className="font-mono text-xs">sk-neo-acct-*</code>).
+        </p>
+      </div>
+
       {newSecret && (
         <div
           className="rounded-xl p-4 space-y-2"

@@ -5,6 +5,7 @@ import { PlatformProvider } from "@/contexts/platform-context";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
 
 export default function DashboardLayout({
   children,
@@ -37,7 +38,17 @@ export default function DashboardLayout({
     <PlatformProvider>
       <div className="flex h-screen" style={{ background: "var(--neo-bg)" }}>
         <Sidebar />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+          <div
+            className="flex items-center gap-3 px-6 py-3 shrink-0"
+            style={{ borderBottom: "1px solid var(--neo-border)" }}
+          >
+            <div className="max-w-xs w-full">
+              <WorkspaceSwitcher />
+            </div>
+          </div>
+          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        </div>
       </div>
     </PlatformProvider>
   );

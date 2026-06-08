@@ -30,6 +30,7 @@ export async function GET(request: Request) {
         name: w.name,
         plan: w.plan,
         scope: w.scope,
+        platformEnabled: w.platformOrgId != null,
         role: w.role,
         memberCount: w.memberCount,
       })),

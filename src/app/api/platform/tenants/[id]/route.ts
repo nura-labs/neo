@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser } from "@/lib/auth/api";
-import { getPlatformOrgByUserId, getTenantById } from "@/lib/platform/queries";
+import { getTenantById } from "@/lib/platform/queries";
+import {
+  getWorkspacePlatformContext,
+  handleWorkspacePlatformError,
+} from "@/lib/platform/web-auth";
 
 export async function GET(
   request: Request,
@@ -8,12 +11,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = await getAuthenticatedUser(request);
-    const org = await getPlatformOrgByUserId(user.id);
-
-    if (!org) {
-      return NextResponse.json({ error: "Platform not enabled" }, { status: 404 });
-    }
+    const { org } = await getWorkspacePlatformContext(request);
 
     const tenant = await getTenantById(org.id, id);
     if (!tenant) {
@@ -29,7 +27,11 @@ export async function GET(
       created_at: tenant.createdAt,
       updated_at: tenant.updatedAt,
     });
-  } catch {
+  } catch (err) {
+    const handled = handleWorkspacePlatformError(err);
+    if (handled) {
+      return NextResponse.json({ error: handled.error }, { status: handled.status });
+    }
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 }

@@ -289,9 +289,10 @@ export async function getPlatformWorkspace(
 
 export async function getPlatformWorkspaceBySlug(
   platformOrgId: string,
-  slug: string
+  slug: string,
+  orgUserId?: string
 ): Promise<Workspace | null> {
-  const [ws] = await db
+  const [platformWs] = await db
     .select()
     .from(workspaces)
     .where(
@@ -302,7 +303,25 @@ export async function getPlatformWorkspaceBySlug(
       )
     )
     .limit(1);
-  return ws ?? null;
+
+  if (platformWs) return platformWs;
+
+  if (!orgUserId) return null;
+
+  const [memberRow] = await db
+    .select({ workspace: workspaces })
+    .from(workspaces)
+    .innerJoin(memberships, eq(memberships.workspaceId, workspaces.id))
+    .where(
+      and(
+        eq(workspaces.slug, slug),
+        eq(memberships.userId, orgUserId),
+        eq(workspaces.scope, "personal")
+      )
+    )
+    .limit(1);
+
+  return memberRow?.workspace ?? null;
 }
 
 export async function listWorkspacesByScope(

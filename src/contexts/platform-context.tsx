@@ -10,6 +10,7 @@ import {
 } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/auth/firebase-client";
+import { useAuth } from "@/contexts/auth-context";
 
 export type PlatformMode = "personal" | "platform";
 
@@ -37,6 +38,7 @@ const PlatformContext = createContext<PlatformContextValue | null>(null);
 const MODE_LS_KEY = "neo-mode";
 
 export function PlatformProvider({ children }: { children: ReactNode }) {
+  const { currentWorkspace, loading: authLoading } = useAuth();
   const [platformOrg, setPlatformOrg] = useState<PlatformOrg | null>(null);
   const [loading, setLoading] = useState(true);
   const [mode, setModeState] = useState<PlatformMode>("personal");
@@ -50,9 +52,16 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setMode = useCallback((next: PlatformMode) => {
+    setModeState(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(MODE_LS_KEY, next);
+    }
+  }, []);
+
   const refreshPlatform = useCallback(async () => {
     const u = auth.currentUser;
-    if (!u) {
+    if (!u || !currentWorkspace) {
       setPlatformOrg(null);
       setLoading(false);
       return;
@@ -62,7 +71,10 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     try {
       const token = await u.getIdToken();
       const res = await fetch("/api/platform", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Workspace": currentWorkspace.slug,
+        },
       });
       if (!res.ok) {
         setPlatformOrg(null);
@@ -78,11 +90,13 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentWorkspace]);
 
   useEffect(() => {
+    if (authLoading) return;
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
+      if (user && currentWorkspace) {
         refreshPlatform();
       } else {
         setPlatformOrg(null);
@@ -90,21 +104,26 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
       }
     });
     return unsubscribe;
-  }, [refreshPlatform]);
+  }, [authLoading, currentWorkspace, refreshPlatform]);
 
-  const setMode = useCallback((next: PlatformMode) => {
-    setModeState(next);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(MODE_LS_KEY, next);
+  useEffect(() => {
+    if (!authLoading && currentWorkspace) {
+      refreshPlatform();
     }
-  }, []);
+  }, [authLoading, currentWorkspace?.slug, refreshPlatform]);
+
+  useEffect(() => {
+    if (!loading && !platformOrg && mode === "platform") {
+      setMode("personal");
+    }
+  }, [loading, platformOrg, mode, setMode]);
 
   return (
     <PlatformContext.Provider
       value={{
         isPlatformEnabled: platformOrg !== null,
         platformOrg,
-        loading,
+        loading: loading || authLoading,
         mode,
         setMode,
         refreshPlatform,

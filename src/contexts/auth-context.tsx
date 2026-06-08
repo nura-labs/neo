@@ -17,6 +17,7 @@ export type Workspace = {
   name: string;
   plan: string;
   scope?: string;
+  platformEnabled?: boolean;
   role: "owner" | "member";
   memberCount?: number;
 };

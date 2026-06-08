@@ -53,7 +53,7 @@ export async function getPlatformContext(
   const workspaceSlug = request.headers.get("X-Neo-Workspace");
   let workspace: Workspace | null = null;
   if (workspaceSlug) {
-    workspace = await getPlatformWorkspaceBySlug(org.id, workspaceSlug);
+    workspace = await getPlatformWorkspaceBySlug(org.id, workspaceSlug, org.userId);
     if (!workspace) {
       throw new PlatformAuthError("not_found", `Workspace '${workspaceSlug}' not found.`);
     }

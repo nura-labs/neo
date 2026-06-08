@@ -12,13 +12,8 @@ interface Props {
 export function WorkspaceSwitcher({ collapsed = false }: Props) {
   const { workspaces, currentWorkspace, setCurrentWorkspaceSlug } = useAuth();
 
-  const personalWorkspaces = workspaces.filter(
-    (w) => !w.scope || w.scope === "personal"
-  );
+  const visibleWorkspaces = workspaces.filter((w) => !w.scope || w.scope === "personal");
 
-  // Hard reload on switch — dashboard pages fetch data in useEffect with
-  // empty deps, so a soft state change leaves stale numbers on screen
-  // (issue: user switched to empty workspace but saw 49 nodes from previous).
   function pickWorkspace(slug: string) {
     if (slug === currentWorkspace?.slug) {
       setOpen(false);
@@ -28,6 +23,7 @@ export function WorkspaceSwitcher({ collapsed = false }: Props) {
     setOpen(false);
     window.location.reload();
   }
+
   const [open, setOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -43,12 +39,34 @@ export function WorkspaceSwitcher({ collapsed = false }: Props) {
     return () => window.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  if (!currentWorkspace) return null;
-
   const activeWorkspace =
-    personalWorkspaces.find((w) => w.slug === currentWorkspace.slug) ??
-    personalWorkspaces[0] ??
+    visibleWorkspaces.find((w) => w.slug === currentWorkspace?.slug) ??
+    visibleWorkspaces[0] ??
     currentWorkspace;
+
+  if (!activeWorkspace && visibleWorkspaces.length === 0) {
+    return (
+      <>
+        <div className={collapsed ? "flex justify-center" : ""}>
+          <button
+            onClick={() => setCreateOpen(true)}
+            className={
+              collapsed
+                ? "flex h-9 w-9 items-center justify-center rounded-md border bg-card hover:bg-accent"
+                : "flex w-full items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm hover:bg-accent"
+            }
+            aria-label="Create workspace"
+          >
+            <Plus className={collapsed ? "h-4 w-4" : "h-4 w-4 shrink-0"} />
+            {!collapsed && <span className="truncate">New workspace</span>}
+          </button>
+        </div>
+        <CreateWorkspaceModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      </>
+    );
+  }
+
+  if (!activeWorkspace) return null;
 
   const initials = activeWorkspace.name
     .split(" ")
@@ -70,7 +88,7 @@ export function WorkspaceSwitcher({ collapsed = false }: Props) {
           </button>
           {open && (
             <SwitcherMenu
-              workspaces={personalWorkspaces}
+              workspaces={visibleWorkspaces}
               current={activeWorkspace}
               onPick={pickWorkspace}
               onCreate={() => {
@@ -96,14 +114,12 @@ export function WorkspaceSwitcher({ collapsed = false }: Props) {
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary text-xs font-medium text-primary-foreground">
             {initials}
           </span>
-          <span className="flex-1 truncate font-medium">
-            {activeWorkspace.name}
-          </span>
+          <span className="flex-1 truncate font-medium">{activeWorkspace.name}</span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
         {open && (
           <SwitcherMenu
-            workspaces={personalWorkspaces}
+            workspaces={visibleWorkspaces}
             current={activeWorkspace}
             onPick={pickWorkspace}
             onCreate={() => {
@@ -135,9 +151,7 @@ function SwitcherMenu({
     <div
       className={`${floating ? "absolute left-12 top-0" : "absolute left-0 top-full mt-1 w-full"} z-50 min-w-[220px] rounded-md border bg-popover p-1 shadow-md`}
     >
-      <div className="px-2 pb-1 pt-1 text-xs font-medium text-muted-foreground">
-        Workspaces
-      </div>
+      <div className="px-2 pb-1 pt-1 text-xs font-medium text-muted-foreground">Workspaces</div>
       <ul className="max-h-64 overflow-y-auto">
         {workspaces.map((w) => (
           <li key={w.id}>
@@ -145,7 +159,10 @@ function SwitcherMenu({
               onClick={() => onPick(w.slug)}
               className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
             >
-              <span className="truncate">{w.name}</span>
+              <span className="truncate text-left">
+                {w.name}
+                <span className="block text-[10px] font-mono text-muted-foreground">{w.slug}</span>
+              </span>
               {w.slug === current.slug && (
                 <Check className="h-4 w-4 shrink-0 text-primary" />
               )}

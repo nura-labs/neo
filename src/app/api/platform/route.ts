@@ -1,21 +1,24 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser } from "@/lib/auth/api";
-import { getPlatformOrgByUserId } from "@/lib/platform/queries";
+import {
+  getWorkspacePlatformStatus,
+  handleWorkspacePlatformError,
+} from "@/lib/platform/web-auth";
 
 export async function GET(request: Request) {
   try {
-    const user = await getAuthenticatedUser(request);
-    const org = await getPlatformOrgByUserId(user.id);
+    const { enabled, org, workspace } = await getWorkspacePlatformStatus(request);
 
-    if (!org) {
+    if (!enabled || !org) {
       return NextResponse.json({
         enabled: false,
         organization: null,
+        workspace_id: workspace.id,
       });
     }
 
     return NextResponse.json({
       enabled: true,
+      workspace_id: workspace.id,
       organization: {
         id: org.id,
         name: org.name,
@@ -26,7 +29,11 @@ export async function GET(request: Request) {
         updated_at: org.updatedAt,
       },
     });
-  } catch {
+  } catch (err) {
+    const handled = handleWorkspacePlatformError(err);
+    if (handled) {
+      return NextResponse.json({ error: handled.error }, { status: handled.status });
+    }
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 }

@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthenticatedUser } from "@/lib/auth/api";
 import {
-  createAccountToken,
-  enablePlatformOrg,
-  getPlatformOrgByUserId,
-} from "@/lib/platform/queries";
+  enablePlatformForWorkspace,
+  handleWorkspacePlatformError,
+} from "@/lib/platform/web-auth";
 import { generateSlug } from "@/lib/utils/slugify";
+import { getAuthenticatedUser } from "@/lib/auth/api";
 
 const enableSchema = z.object({
   name: z.string().min(1).max(80).optional(),
@@ -19,31 +18,13 @@ const enableSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  let user;
   try {
-    user = await getAuthenticatedUser(request);
+    await getAuthenticatedUser(request);
   } catch {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   try {
-    const existing = await getPlatformOrgByUserId(user.id);
-    if (existing) {
-      return NextResponse.json(
-        {
-          enabled: true,
-          organization: {
-            id: existing.id,
-            name: existing.name,
-            slug: existing.slug,
-            plan: existing.plan,
-            enabled_at: existing.enabledAt,
-          },
-        },
-        { status: 200 }
-      );
-    }
-
     let body: Record<string, unknown> = {};
     try {
       body = await request.json();
@@ -52,24 +33,18 @@ export async function POST(request: Request) {
     }
 
     const input = enableSchema.parse(body);
-    const name = input.name ?? `${user.name}'s organization`;
-    const slug = input.slug ?? (generateSlug(name) || user.username);
+    const name = input.name;
+    const slug = input.slug ?? (name ? generateSlug(name) : undefined);
 
-    const org = await enablePlatformOrg({
-      userId: user.id,
+    const { org, workspace, created } = await enablePlatformForWorkspace(request, {
       name,
       slug,
-    });
-
-    const { token, plaintext } = await createAccountToken({
-      platformOrgId: org.id,
-      createdByUserId: user.id,
-      name: "Default",
     });
 
     return NextResponse.json(
       {
         enabled: true,
+        workspace_id: workspace.id,
         organization: {
           id: org.id,
           name: org.name,
@@ -77,19 +52,19 @@ export async function POST(request: Request) {
           plan: org.plan,
           enabled_at: org.enabledAt,
         },
-        default_key: {
-          id: token.id,
-          name: token.name,
-          token_prefix: token.tokenPrefix,
-          secret: plaintext,
-          scopes: token.scopes,
-        },
       },
-      { status: 201 }
+      { status: created ? 201 : 200 }
     );
   } catch (error) {
+    const handled = handleWorkspacePlatformError(error);
+    if (handled) {
+      return NextResponse.json({ error: handled.error }, { status: handled.status });
+    }
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+    }
+    if (error instanceof Error && error.message.includes("Forbidden")) {
+      return NextResponse.json({ error: "Only workspace owners can enable Platform" }, { status: 403 });
     }
     console.error("enable platform failed:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

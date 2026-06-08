@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUser } from "@/lib/auth/api";
-import { getPlatformOrgByUserId, revokeAccountToken } from "@/lib/platform/queries";
+import { revokeAccountToken } from "@/lib/platform/queries";
+import {
+  getWorkspacePlatformContext,
+  handleWorkspacePlatformError,
+} from "@/lib/platform/web-auth";
 
 export async function DELETE(
   request: Request,
@@ -8,12 +11,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const user = await getAuthenticatedUser(request);
-    const org = await getPlatformOrgByUserId(user.id);
-
-    if (!org) {
-      return NextResponse.json({ error: "Platform not enabled" }, { status: 404 });
-    }
+    const { org } = await getWorkspacePlatformContext(request);
 
     const revoked = await revokeAccountToken(org.id, id);
     if (!revoked) {
@@ -21,7 +19,11 @@ export async function DELETE(
     }
 
     return NextResponse.json({ deleted: true, id });
-  } catch {
+  } catch (err) {
+    const handled = handleWorkspacePlatformError(err);
+    if (handled) {
+      return NextResponse.json({ error: handled.error }, { status: handled.status });
+    }
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 }

@@ -61,7 +61,7 @@ export function CreateWorkspaceModal({ open, onClose }: Props) {
       open={open}
       onClose={onClose}
       title="Create workspace"
-      description="A workspace is where your knowledge lives — keep it solo or invite others."
+      description="One workspace for your knowledge and Platform API (prod, dev, etc.). Personal and Platform modes share the same workspace."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
@@ -70,7 +70,7 @@ export function CreateWorkspaceModal({ open, onClose }: Props) {
             id="ws-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Acme"
+            placeholder="Production"
             required
             autoFocus
           />
@@ -84,10 +84,10 @@ export function CreateWorkspaceModal({ open, onClose }: Props) {
               setSlugTouched(true);
               setSlug(slugify(e.target.value));
             }}
-            placeholder="acme"
+            placeholder="prod"
           />
           <p className="text-xs text-muted-foreground">
-            Used in URLs and API tokens. Lowercase letters, numbers, and dashes.
+            Used in URLs and as X-Neo-Workspace in the Platform API.
           </p>
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}

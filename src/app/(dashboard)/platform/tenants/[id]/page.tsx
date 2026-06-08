@@ -32,12 +32,16 @@ export default function TenantDetailPage() {
   }, [id]);
 
   if (loading) {
-    return <p className="text-sm neo-text-muted">Loading…</p>;
+    return (
+      <div className="max-w-4xl mx-auto">
+        <p className="text-sm neo-text-muted">Loading…</p>
+      </div>
+    );
   }
 
   if (error || !tenant) {
     return (
-      <div className="space-y-4">
+      <div className="max-w-4xl mx-auto space-y-4">
         <Link
           href="/platform/tenants"
           className="inline-flex items-center gap-1 text-sm neo-text-muted hover:opacity-80"
@@ -53,7 +57,7 @@ export default function TenantDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8">
       <Link
         href="/platform/tenants"
         className="inline-flex items-center gap-1 text-sm neo-text-muted hover:opacity-80"
@@ -62,10 +66,14 @@ export default function TenantDetailPage() {
         Back to tenants
       </Link>
 
+      <div>
+        <h1 className="neo-heading text-2xl">{tenant.name}</h1>
+        <p className="text-sm neo-text-muted font-mono mt-1">{tenant.external_id}</p>
+      </div>
+
       <div className="neo-surface rounded-xl p-6 space-y-4">
         <div>
-          <p className="neo-label">Tenant</p>
-          <h2 className="neo-heading text-xl mt-1">{tenant.name}</h2>
+          <p className="neo-label">Details</p>
         </div>
 
         <dl className="grid gap-4 md:grid-cols-2 text-sm">
