@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { usePlatform } from "@/contexts/platform-context";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
 import { DOCS_URL } from "@/lib/constants/urls";
 import {
   LayoutDashboard,
@@ -83,35 +84,65 @@ export function Sidebar() {
         borderRight: "1px solid var(--neo-border)",
       }}
     >
-      {/* Logo + collapse */}
-      <div
-        className="flex items-center justify-between h-14 px-4 shrink-0"
-        style={{ borderBottom: "1px solid var(--neo-border)" }}
-      >
-        <Link href={mode === "platform" ? "/platform" : "/"} className="flex items-center gap-2 overflow-hidden min-w-0">
-          <AnimatePresence mode="wait">
-            {!collapsed ? (
-              <motion.div key="full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col leading-none">
-                <span className="text-[15px] font-semibold" style={{ color: "var(--neo-fg)" }}>Neo</span>
-                <span className="neo-label" style={{ fontSize: 9, marginTop: 2 }}>by Nura Labs</span>
-              </motion.div>
-            ) : (
-              <motion.span key="short" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-[15px] font-semibold" style={{ color: "var(--neo-fg)" }}>
-                N
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </Link>
-        <button
-          onClick={toggleCollapse}
-          className="p-1.5 rounded-md transition-colors shrink-0"
-          style={{ color: "var(--neo-fg-muted)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--neo-fg-secondary)")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--neo-fg-muted)")}
+      {/* Header — workspace selector (Notion-style) + brand + collapse */}
+      {collapsed ? (
+        <div
+          className="flex flex-col items-center gap-2 py-3 px-2 shrink-0"
+          style={{ borderBottom: "1px solid var(--neo-border)" }}
         >
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
-      </div>
+          <WorkspaceSwitcher
+            variant="header"
+            collapsed
+            headerExtra={
+              <button
+                onClick={toggleCollapse}
+                className="p-1.5 rounded-md transition-colors shrink-0"
+                style={{ color: "var(--neo-fg-muted)" }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--neo-fg-secondary)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--neo-fg-muted)")}
+                title="Expand sidebar"
+              >
+                <PanelLeftOpen size={16} />
+              </button>
+            }
+          />
+          <Link
+            href={mode === "platform" ? "/platform" : "/"}
+            className="text-[13px] font-semibold leading-none"
+            style={{ color: "var(--neo-fg)" }}
+            title="Neo by Nura Labs"
+          >
+            N
+          </Link>
+        </div>
+      ) : (
+        <div className="shrink-0" style={{ borderBottom: "1px solid var(--neo-border)" }}>
+          <div className="flex items-center gap-0.5 h-11 px-2 min-w-0">
+            <WorkspaceSwitcher variant="header" collapsed={false} />
+            <button
+              onClick={toggleCollapse}
+              className="p-1.5 rounded-md transition-colors shrink-0"
+              style={{ color: "var(--neo-fg-muted)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--neo-fg-secondary)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--neo-fg-muted)")}
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose size={16} />
+            </button>
+          </div>
+          <Link
+            href={mode === "platform" ? "/platform" : "/"}
+            className="flex px-3 pb-2.5 pt-0 leading-none transition-opacity hover:opacity-80"
+          >
+            <span className="text-[15px] font-semibold" style={{ color: "var(--neo-fg)" }}>
+              Neo
+            </span>
+            <span className="neo-label ml-1.5" style={{ fontSize: 9, alignSelf: "flex-end", paddingBottom: 1 }}>
+              by Nura Labs
+            </span>
+          </Link>
+        </div>
+      )}
 
       {/* Mode switcher — only when current workspace has Platform enabled */}
       {isPlatformEnabled && !collapsed && (
