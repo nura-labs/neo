@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-
-const DOCS_BASE = "https://docs.neo.nura.sh/errors";
+import { DOCS_URL } from "@/lib/constants/urls";
 
 export interface ApiErrorBody {
   error: {
@@ -57,7 +56,7 @@ export function apiError(
         code,
         message,
         ...(param ? { param } : {}),
-        doc_url: `${DOCS_BASE}/${code}`,
+        doc_url: `${DOCS_URL}#errors`,
       },
     },
     { status, headers: apiHeaders(requestId) }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { DOCS_URL } from "@/lib/constants/urls";
 import { usePlatform } from "@/contexts/platform-context";
 import { apiFetch } from "@/lib/api";
 import { ArrowRight, Building2, CheckCircle, Copy } from "lucide-react";
@@ -68,12 +69,14 @@ export function PlatformTab() {
             Open Platform dashboard
             <ArrowRight size={14} />
           </Link>
-          <Link
-            href="/docs"
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="block text-sm neo-text-muted hover:opacity-80"
           >
             View API documentation →
-          </Link>
+          </a>
         </div>
       </div>
     );
@@ -136,9 +139,14 @@ export function PlatformTab() {
         >
           {enabling ? "Enabling…" : "Enable Platform"}
         </button>
-        <Link href="/docs" className="text-sm neo-text-muted hover:opacity-80">
+        <a
+          href={DOCS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm neo-text-muted hover:opacity-80"
+        >
           Read the docs
-        </Link>
+        </a>
       </div>
     </div>
   );

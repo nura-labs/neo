@@ -8,6 +8,7 @@ import { usePlatform } from "@/contexts/platform-context";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
+import { DOCS_URL } from "@/lib/constants/urls";
 import {
   LayoutDashboard,
   FileText,
@@ -40,7 +41,7 @@ const platformNavItems = [
   { href: "/platform/tenants", label: "Tenants", icon: Users },
   { href: "/platform/keys", label: "API Keys", icon: Key },
   { href: "/platform/usage", label: "Usage", icon: BarChart3 },
-  { href: "/docs", label: "Docs", icon: BookOpen },
+  { href: DOCS_URL, label: "Docs", icon: BookOpen, external: true },
 ];
 
 export function Sidebar() {
@@ -169,31 +170,29 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 px-3 py-3 space-y-1">
         {navItems.map((item) => {
-          const active = isActive(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3.5 rounded-lg px-3 py-2.5 text-[15px] transition-colors"
-              style={{
-                color: active ? "var(--neo-fg)" : "var(--neo-fg-muted)",
-                background: active ? "var(--neo-surface-hover)" : "transparent",
-                fontWeight: active ? 500 : 400,
-              }}
-              onMouseEnter={(e) => {
-                if (!active) {
-                  e.currentTarget.style.background = "var(--neo-surface-hover)";
-                  e.currentTarget.style.color = "var(--neo-fg-secondary)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!active) {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "var(--neo-fg-muted)";
-                }
-              }}
-              title={collapsed ? item.label : undefined}
-            >
+          const active = !("external" in item && item.external) && isActive(item.href);
+          const className = "flex items-center gap-3.5 rounded-lg px-3 py-2.5 text-[15px] transition-colors";
+          const style = {
+            color: active ? "var(--neo-fg)" : "var(--neo-fg-muted)",
+            background: active ? "var(--neo-surface-hover)" : "transparent",
+            fontWeight: active ? 500 : 400,
+          } as const;
+          const hoverHandlers = {
+            onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+              if (!active) {
+                e.currentTarget.style.background = "var(--neo-surface-hover)";
+                e.currentTarget.style.color = "var(--neo-fg-secondary)";
+              }
+            },
+            onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+              if (!active) {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--neo-fg-muted)";
+              }
+            },
+          };
+          const content = (
+            <>
               <item.icon size={20} className="shrink-0" />
               <AnimatePresence>
                 {!collapsed && (
@@ -202,6 +201,36 @@ export function Sidebar() {
                   </motion.span>
                 )}
               </AnimatePresence>
+            </>
+          );
+
+          if ("external" in item && item.external) {
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={className}
+                style={style}
+                {...hoverHandlers}
+                title={collapsed ? item.label : undefined}
+              >
+                {content}
+              </a>
+            );
+          }
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={className}
+              style={style}
+              {...hoverHandlers}
+              title={collapsed ? item.label : undefined}
+            >
+              {content}
             </Link>
           );
         })}

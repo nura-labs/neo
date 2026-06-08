@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { usePlatform } from "@/contexts/platform-context";
 import Link from "next/link";
+import { DOCS_URL } from "@/lib/constants/urls";
 import { ArrowRight, BarChart3, Key, Layers, Users } from "lucide-react";
 
 type UsageData = {
@@ -131,14 +132,16 @@ export default function PlatformOverviewPage() {
         <p className="text-sm neo-text-muted mt-2">
           Create an API key, provision tenants, and start sending context to your agents.
         </p>
-        <Link
-          href="/docs"
+        <a
+          href={DOCS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-2 mt-4 text-sm font-medium"
           style={{ color: "var(--neo-accent)" }}
         >
           Read the API docs
           <ArrowRight size={14} />
-        </Link>
+        </a>
       </div>
     </div>
   );

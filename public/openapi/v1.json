@@ -3,7 +3,11 @@
   "info": {
     "title": "Neo Platform API",
     "version": "1.0.0",
-    "description": "Neo Platform API for multi-tenant context management."
+    "description": "Neo Platform API for multi-tenant context management. Integration guides and agent prompts: https://nura.sh/neo/docs",
+    "externalDocs": {
+      "description": "Integration guides and agent prompts",
+      "url": "https://nura.sh/neo/docs"
+    }
   },
   "servers": [{ "url": "/v1" }],
   "security": [{ "bearerAuth": [] }],

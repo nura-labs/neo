@@ -41,4 +41,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# firecrawl local cache (scraped docs, research)
 .firecrawl/
