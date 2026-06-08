@@ -397,7 +397,12 @@ export const knowledgeNodes = pgTable(
     index("knowledge_nodes_workspace_tenant_idx").on(table.workspaceId, table.tenantId),
     index("knowledge_nodes_workspace_type_idx").on(table.workspaceId, table.type),
     index("knowledge_nodes_workspace_source_idx").on(table.workspaceId, table.source),
-    uniqueIndex("knowledge_nodes_workspace_slug_idx").on(table.workspaceId, table.slug),
+    uniqueIndex("knowledge_nodes_workspace_slug_personal_idx")
+      .on(table.workspaceId, table.slug)
+      .where(sql`${table.tenantId} IS NULL`),
+    uniqueIndex("knowledge_nodes_workspace_tenant_slug_idx")
+      .on(table.workspaceId, table.tenantId, table.slug)
+      .where(sql`${table.tenantId} IS NOT NULL`),
     index("knowledge_nodes_created_by_idx").on(table.createdByUserId),
   ]
 );
