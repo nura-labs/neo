@@ -1,17 +1,246 @@
 # Neo Platform API
 
-> Behavioral memory layer for B2B products. Multi-tenant context via REST.
+> Neo is the behavioral memory layer by Nura Labs. Embed multi-tenant context (knowledge nodes, search, graph) in your product via REST.
 
-## Read first
+## Documentation
 
-- Documentation (guides + agent prompts): https://nura.sh/neo/docs
-- OpenAPI 3.1 (full endpoint reference): https://neo.nura.sh/v1/openapi.json
+- Human-readable API reference: https://nura.sh/neo/docs
+- OpenAPI 3.1 JSON: https://neo.nura.sh/v1/openapi.json
+- Platform dashboard: https://neo.nura.sh/platform
 
-## Essentials
+## Base URL
 
-- Base URL: https://neo.nura.sh/v1
-- Auth: Authorization: Bearer sk-neo-acct-...
-- Context scoping: X-Neo-Workspace, X-Neo-Tenant-Id (required on /v1/context/*)
-- Dashboard: https://neo.nura.sh/platform
+https://neo.nura.sh/v1
 
-Do not duplicate endpoint lists here — use OpenAPI for schemas and paths, docs for integration guides.
+## Authentication
+
+All endpoints require an account-level API key:
+
+```
+Authorization: Bearer sk-neo-acct-...
+```
+
+Create keys at https://neo.nura.sh/platform/keys or POST /v1/keys (secret returned once).
+
+Key scopes: read, write, admin. Separate from personal MCP/CLI workspace tokens.
+
+## Context headers (required on /v1/context/*)
+
+```
+X-Neo-Workspace: <platform-workspace-slug>
+X-Neo-Tenant-Id: <tenant-external_id-or-slug>
+```
+
+Optional on other routes — when present, /v1/me returns active_workspace and active_tenant.
+
+## Conventions
+
+- JSON request/response bodies
+- List endpoints: `{ "object": "list", "data": [], "has_more": bool, "next_cursor": string|null }`
+- Pagination query: `limit` (max 100), `starting_after` (cursor from previous page)
+- Response headers: X-Request-Id, Neo-Api-Version: 1, X-RateLimit-*
+- Errors: `{ "error": { "code", "message", "param?", "doc_url?" } }` + request_id in body
+
+## Quickstart
+
+```bash
+export NEO_API_KEY="sk-neo-acct-..."
+export WS="prod"
+export TENANT="cust_123"
+
+curl -s https://neo.nura.sh/v1/me -H "Authorization: Bearer $NEO_API_KEY"
+curl -s https://neo.nura.sh/v1/tenants -H "Authorization: Bearer $NEO_API_KEY" -H "Content-Type: application/json" -d '{"external_id":"cust_123","name":"Acme"}'
+curl -s https://neo.nura.sh/v1/context/search -H "Authorization: Bearer $NEO_API_KEY" -H "X-Neo-Workspace: $WS" -H "X-Neo-Tenant-Id: $TENANT" -H "Content-Type: application/json" -d '{"query":"deploy","top_k":5,"mode":"hybrid"}'
+```
+
+---
+
+## Account
+
+### GET /v1/me
+Returns account, organization, scopes, optional active_workspace/active_tenant.
+
+### GET /v1/organization
+Returns platform org details (plan, slug, enabled_at).
+
+---
+
+## Workspaces
+
+Platform workspaces isolate context. Use slug in X-Neo-Workspace.
+
+### GET /v1/workspaces
+Query: limit, starting_after
+
+### POST /v1/workspaces
+Body: `{ "name": string, "slug"?: string }` — slug auto-generated if omitted
+
+### GET /v1/workspaces/{workspace_id}
+By UUID or slug.
+
+### PATCH /v1/workspaces/{workspace_id}
+Body: `{ "name"?, "slug"? }`
+
+### DELETE /v1/workspaces/{workspace_id}
+
+---
+
+## Tenants
+
+Tenants = your end-customers. Map external_id to your user/org ID.
+
+### GET /v1/tenants
+Query: limit, starting_after
+
+### POST /v1/tenants
+Body: `{ "external_id": string, "name": string, "slug"?, "metadata"?: object }`
+
+### GET /v1/tenants/{tenant_id}
+By UUID, slug, or external_id.
+
+### PATCH /v1/tenants/{tenant_id}
+Body: `{ "name"?, "metadata"?: object }`
+
+### DELETE /v1/tenants/{tenant_id}
+
+---
+
+## API Keys
+
+### GET /v1/keys
+List keys (prefix only, no secrets).
+
+### POST /v1/keys
+Body: `{ "name": string, "scopes"?: ["read"|"write"|"admin"] }`
+Response includes `secret` once.
+
+### DELETE /v1/keys/{key_id}
+
+---
+
+## Context — Overview & Graph
+
+All routes require Authorization + X-Neo-Workspace + X-Neo-Tenant-Id.
+
+### GET /v1/context/overview
+Query: source (optional)
+Returns total_nodes, total_edges, type_breakdown, source_breakdown, recent_nodes.
+
+### GET /v1/context/graph
+Returns `{ nodes: [{id,name,type,val}], links: [{source,target,name}] }` scoped to tenant.
+
+---
+
+## Context — Search
+
+### POST /v1/context/search
+Body:
+```json
+{
+  "query": "string (required)",
+  "top_k": 20,
+  "mode": "hybrid|semantic|text",
+  "type": "optional node type filter",
+  "source": "optional",
+  "tags": ["optional"]
+}
+```
+Returns `{ object: "search_result", mode, query, data: [context_node...] }`
+
+---
+
+## Context — Nodes
+
+### GET /v1/context/nodes
+Query: limit, starting_after, type, source, tags (comma-separated)
+
+### POST /v1/context/nodes
+Body:
+```json
+{
+  "type": "decision|pattern|workflow|note|...",
+  "title": "string",
+  "content": "markdown, supports [[wikilinks]]",
+  "tags": [],
+  "source": "api",
+  "sourceMeta": {},
+  "relatedTo": [{ "id": "uuid", "relationship": "related_to" }]
+}
+```
+
+### GET /v1/context/nodes/{node_id}
+
+### GET /v1/context/nodes/by-slug/{slug}
+Slugs unique per (workspace, tenant).
+
+### GET /v1/context/nodes/{node_id}/related
+Query: relationship (optional)
+
+### PATCH /v1/context/nodes/{node_id}
+Body: title, content, type, tags, source, sourceMeta (partial)
+
+### DELETE /v1/context/nodes/{node_id}
+
+### Node types
+pattern, convention, architecture, decision, concept, workflow, snippet, module, api, service, config, person, project, team, tool, reference, research, note
+
+### Edge relationships
+uses, follows, contains, depends_on, related_to, extends, contradicts, alternative_to, same_concept, evolved_from, implements
+
+### Context node object
+```json
+{
+  "object": "context_node",
+  "id": "uuid",
+  "slug": "string",
+  "type": "string",
+  "title": "string",
+  "content": "string",
+  "tags": [],
+  "source": "string",
+  "source_meta": {},
+  "tenant_id": "uuid",
+  "workspace_id": "uuid",
+  "created_at": "ISO8601",
+  "updated_at": "ISO8601"
+}
+```
+
+---
+
+## Usage
+
+### GET /v1/usage
+Organization-wide usage aggregation.
+
+### GET /v1/usage/tenants/{tenant_id}
+Per-tenant usage (UUID, slug, or external_id).
+
+---
+
+## Errors
+
+HTTP 400 invalid_request, 401 authentication_required, 403 forbidden, 404 not_found, 409 conflict, 429 rate limit, 500 internal.
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "Missing X-Neo-Workspace header.",
+    "param": "X-Neo-Workspace",
+    "doc_url": "https://nura.sh/neo/docs#errors"
+  }
+}
+```
+
+---
+
+## Integration pattern for agents
+
+1. Store NEO_API_KEY in environment
+2. On customer signup: POST /v1/tenants with external_id = your customer ID
+3. Before each LLM call: POST /v1/context/search with workspace + tenant headers
+4. After significant actions: POST /v1/context/nodes
+5. Monitor: GET /v1/usage and GET /v1/usage/tenants/{id}
+
+Full curl examples and response samples: https://nura.sh/neo/docs
