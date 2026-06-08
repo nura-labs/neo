@@ -1,0 +1,92 @@
+# Neo Platform API
+
+> Neo is the behavioral memory layer by Nura Labs. The Platform API lets you embed context management in your product with multi-tenant support.
+
+## Base URL
+
+https://neo.nura.sh/v1
+
+## Authentication
+
+Bearer token with account API key (prefix: sk-neo-acct-)
+
+```
+Authorization: Bearer sk-neo-acct-...
+```
+
+Create keys at /platform/keys or POST /v1/keys
+
+## Required Headers (context operations)
+
+- X-Neo-Workspace: platform workspace slug
+- X-Neo-Tenant-Id: tenant external_id or slug
+
+## Key Endpoints
+
+### Account
+- GET /v1/me — current account
+- GET /v1/organization — organization details
+
+### Workspaces
+- GET /v1/workspaces — list workspaces
+- POST /v1/workspaces — create workspace
+- GET /v1/workspaces/{id} — get workspace
+
+### Tenants
+- GET /v1/tenants — list tenants
+- POST /v1/tenants — create tenant (external_id, name)
+- GET /v1/tenants/{id} — get tenant
+
+### API Keys
+- GET /v1/keys — list keys
+- POST /v1/keys — create key (returns secret once)
+- DELETE /v1/keys/{id} — revoke key
+
+### Context API
+- GET /v1/context/overview — workspace overview
+- POST /v1/context/search — semantic search
+- GET /v1/context/nodes — list nodes
+- POST /v1/context/nodes — create node
+- GET /v1/context/nodes/{id} — get node
+- GET /v1/context/nodes/by-slug/{slug} — get by slug
+- GET /v1/context/nodes/{id}/related — related nodes
+- GET /v1/context/graph — knowledge graph
+
+### Usage
+- GET /v1/usage — organization usage
+- GET /v1/usage/tenants/{tenant_id} — tenant usage
+
+## OpenAPI
+
+Full spec: https://neo.nura.sh/v1/openapi.json
+
+## Documentation
+
+Human-readable docs: https://nura.sh/neo/docs
+
+## Quick Example
+
+```bash
+curl -s https://neo.nura.sh/v1/me \
+  -H "Authorization: Bearer $NEO_API_KEY"
+
+curl -s https://neo.nura.sh/v1/context/search \
+  -H "Authorization: Bearer $NEO_API_KEY" \
+  -H "X-Neo-Workspace: my-workspace" \
+  -H "X-Neo-Tenant-Id: cust_123" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"deployment process"}'
+```
+
+## Error Format
+
+```json
+{
+  "error": {
+    "type": "invalid_request_error",
+    "message": "Description",
+    "param": "field_name"
+  },
+  "request_id": "req_..."
+}
+```

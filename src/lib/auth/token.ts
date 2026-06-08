@@ -65,6 +65,18 @@ export function generateCliToken(): GeneratedToken {
 }
 
 /**
+ * Platform account API key: `sk-neo-acct-{32 hex chars}`
+ * Org-scoped; workspace + tenant resolved per request via headers.
+ */
+export function generateAccountApiToken(): GeneratedToken {
+  const random = randomBytes(32).toString("hex");
+  const plaintext = `sk-neo-acct-${random}`;
+  const prefix = `sk-neo-acct-${random.slice(0, 8)}`;
+  const hash = hashToken(plaintext);
+  return { plaintext, prefix, hash };
+}
+
+/**
  * Short, human-friendly device-flow code: 4-4 chars from an unambiguous alphabet.
  * Example: "ENNA-YASA". Looks tidy on a TTY and can be typed in a browser if open()
  * fails.

@@ -28,11 +28,13 @@ import type {
   KnowledgeEdge,
   DreamSuggestion,
   Role,
+  WorkspaceScope,
 } from "./schema";
 import type { CreateNodeInput, UpdateNodeInput } from "../validators/knowledge";
 import { generateSlug, generateUniqueSlug } from "../utils/slugify";
 import { syncWikilinkEdges } from "../knowledge/sync-edges";
 import { generateNodeEmbedding } from "../knowledge/embeddings";
+import { logUsage, surfaceFromVia } from "../usage/log";
 
 // ─── Embedding helper ─────────────────────────────────────
 
@@ -91,6 +93,8 @@ export async function createWorkspace(data: {
   name: string;
   createdByUserId: string;
   plan?: string;
+  scope?: WorkspaceScope;
+  platformOrgId?: string | null;
 }): Promise<Workspace> {
   const [workspace] = await db
     .insert(workspaces)
@@ -99,6 +103,8 @@ export async function createWorkspace(data: {
       name: data.name,
       createdByUserId: data.createdByUserId,
       plan: data.plan ?? "free",
+      scope: data.scope ?? "personal",
+      platformOrgId: data.platformOrgId ?? null,
     })
     .returning();
   return workspace;
@@ -522,7 +528,7 @@ export interface LogActivityInput {
     | "token.create"
     | "dream.run"
     | string;
-  via?: "web" | "mcp" | "cli" | "system";
+  via?: "web" | "mcp" | "cli" | "api" | "system";
   summary: string;
   payload?: Record<string, unknown>;
 }
@@ -532,12 +538,13 @@ export interface LogActivityInput {
  * the calling request — the activity feed is observability, not consistency.
  */
 export function logActivity(input: LogActivityInput): void {
+  const via = input.via ?? "web";
   db.insert(activityEvents)
     .values({
       workspaceId: input.workspaceId,
       actorUserId: input.actorUserId ?? null,
       type: input.type,
-      via: input.via ?? "web",
+      via,
       summary: input.summary,
       payload: input.payload ?? {},
     })
@@ -545,6 +552,15 @@ export function logActivity(input: LogActivityInput): void {
     .catch((err) => {
       console.error("[activity] log failed:", err instanceof Error ? err.message : err);
     });
+
+  logUsage({
+    surface: surfaceFromVia(via),
+    operation: input.type,
+    via,
+    workspaceId: input.workspaceId,
+    userId: input.actorUserId ?? null,
+    metadata: input.payload,
+  });
 }
 
 export async function listRecentActivity(
@@ -586,17 +602,19 @@ export async function createNode(
   workspaceId: string,
   createdByUserId: string,
   input: CreateNodeInput,
-  via: "web" | "mcp" | "cli" = "web"
+  via: "web" | "mcp" | "cli" | "api" = "web",
+  tenantId?: string | null
 ): Promise<KnowledgeNode> {
   const { relatedTo, ...nodeData } = input;
 
-  const slug = await generateUniqueSlug(workspaceId, nodeData.title);
+  const slug = await generateUniqueSlug(workspaceId, nodeData.title, tenantId);
 
   const [node] = await db
     .insert(knowledgeNodes)
     .values({
-      userId: createdByUserId, // legacy column kept in sync with creator
+      userId: createdByUserId,
       workspaceId,
+      tenantId: tenantId ?? null,
       createdByUserId,
       slug,
       type: nodeData.type,
@@ -643,8 +661,9 @@ export async function updateNode(
   nodeId: string,
   workspaceId: string,
   input: UpdateNodeInput,
-  via: "web" | "mcp" | "cli" = "web",
-  actorUserId?: string
+  via: "web" | "mcp" | "cli" | "api" = "web",
+  actorUserId?: string,
+  tenantId?: string | null
 ): Promise<KnowledgeNode | null> {
   const updates: Record<string, unknown> = {
     ...input,
@@ -652,8 +671,15 @@ export async function updateNode(
   };
 
   if (input.title) {
-    updates.slug = await generateUniqueSlug(workspaceId, input.title);
+    updates.slug = await generateUniqueSlug(workspaceId, input.title, tenantId);
   }
+
+  const tenantCond =
+    tenantId === undefined
+      ? undefined
+      : tenantId === null
+        ? isNull(knowledgeNodes.tenantId)
+        : eq(knowledgeNodes.tenantId, tenantId);
 
   const [node] = await db
     .update(knowledgeNodes)
@@ -661,7 +687,8 @@ export async function updateNode(
     .where(
       and(
         eq(knowledgeNodes.id, nodeId),
-        eq(knowledgeNodes.workspaceId, workspaceId)
+        eq(knowledgeNodes.workspaceId, workspaceId),
+        ...(tenantCond ? [tenantCond] : [])
       )
     )
     .returning();
@@ -693,10 +720,17 @@ export async function updateNode(
 export async function deleteNode(
   nodeId: string,
   workspaceId: string,
-  via: "web" | "mcp" | "cli" = "web",
-  actorUserId?: string
+  via: "web" | "mcp" | "cli" | "api" = "web",
+  actorUserId?: string,
+  tenantId?: string | null
 ): Promise<boolean> {
-  // Capture the slug/title before delete so the activity log carries it.
+  const tenantCond =
+    tenantId === undefined
+      ? undefined
+      : tenantId === null
+        ? isNull(knowledgeNodes.tenantId)
+        : eq(knowledgeNodes.tenantId, tenantId);
+
   const [existing] = await db
     .select({
       id: knowledgeNodes.id,
@@ -708,7 +742,8 @@ export async function deleteNode(
     .where(
       and(
         eq(knowledgeNodes.id, nodeId),
-        eq(knowledgeNodes.workspaceId, workspaceId)
+        eq(knowledgeNodes.workspaceId, workspaceId),
+        ...(tenantCond ? [tenantCond] : [])
       )
     )
     .limit(1);
@@ -718,7 +753,8 @@ export async function deleteNode(
     .where(
       and(
         eq(knowledgeNodes.id, nodeId),
-        eq(knowledgeNodes.workspaceId, workspaceId)
+        eq(knowledgeNodes.workspaceId, workspaceId),
+        ...(tenantCond ? [tenantCond] : [])
       )
     )
     .returning({ id: knowledgeNodes.id });
@@ -738,15 +774,24 @@ export async function deleteNode(
 
 export async function getNodeById(
   nodeId: string,
-  workspaceId: string
+  workspaceId: string,
+  tenantId?: string | null
 ): Promise<KnowledgeNode | null> {
+  const tenantCond =
+    tenantId === undefined
+      ? undefined
+      : tenantId === null
+        ? isNull(knowledgeNodes.tenantId)
+        : eq(knowledgeNodes.tenantId, tenantId);
+
   const [node] = await db
     .select()
     .from(knowledgeNodes)
     .where(
       and(
         eq(knowledgeNodes.id, nodeId),
-        eq(knowledgeNodes.workspaceId, workspaceId)
+        eq(knowledgeNodes.workspaceId, workspaceId),
+        ...(tenantCond ? [tenantCond] : [])
       )
     )
     .limit(1);
@@ -755,15 +800,24 @@ export async function getNodeById(
 
 export async function getNodeBySlug(
   slug: string,
-  workspaceId: string
+  workspaceId: string,
+  tenantId?: string | null
 ): Promise<KnowledgeNode | null> {
+  const tenantCond =
+    tenantId === undefined
+      ? undefined
+      : tenantId === null
+        ? isNull(knowledgeNodes.tenantId)
+        : eq(knowledgeNodes.tenantId, tenantId);
+
   const [node] = await db
     .select()
     .from(knowledgeNodes)
     .where(
       and(
         eq(knowledgeNodes.slug, slug),
-        eq(knowledgeNodes.workspaceId, workspaceId)
+        eq(knowledgeNodes.workspaceId, workspaceId),
+        ...(tenantCond ? [tenantCond] : [])
       )
     )
     .limit(1);
@@ -834,6 +888,7 @@ export async function getNodesByWorkspace(
     tags?: string[];
     page?: number;
     limit?: number;
+    tenantId?: string | null;
   }
 ): Promise<{ nodes: KnowledgeNode[]; total: number }> {
   const page = filters?.page ?? 1;
@@ -841,6 +896,9 @@ export async function getNodesByWorkspace(
   const offset = (page - 1) * limit;
 
   const conditions = [eq(knowledgeNodes.workspaceId, workspaceId)];
+
+  if (filters?.tenantId === null) conditions.push(isNull(knowledgeNodes.tenantId));
+  else if (filters?.tenantId) conditions.push(eq(knowledgeNodes.tenantId, filters.tenantId));
 
   if (filters?.type) conditions.push(eq(knowledgeNodes.type, filters.type));
   if (filters?.source) conditions.push(eq(knowledgeNodes.source, filters.source));
@@ -870,9 +928,12 @@ export async function getNodesByWorkspace(
 export async function searchNodes(
   workspaceId: string,
   query: string,
-  filters?: { type?: string; source?: string; tags?: string[] }
+  filters?: { type?: string; source?: string; tags?: string[]; tenantId?: string | null }
 ): Promise<KnowledgeNode[]> {
   const conditions = [eq(knowledgeNodes.workspaceId, workspaceId)];
+
+  if (filters?.tenantId === null) conditions.push(isNull(knowledgeNodes.tenantId));
+  else if (filters?.tenantId) conditions.push(eq(knowledgeNodes.tenantId, filters.tenantId));
 
   if (filters?.type) conditions.push(eq(knowledgeNodes.type, filters.type));
   if (filters?.source) conditions.push(eq(knowledgeNodes.source, filters.source));
@@ -885,6 +946,7 @@ export async function searchNodes(
       id: knowledgeNodes.id,
       userId: knowledgeNodes.userId,
       workspaceId: knowledgeNodes.workspaceId,
+      tenantId: knowledgeNodes.tenantId,
       createdByUserId: knowledgeNodes.createdByUserId,
       slug: knowledgeNodes.slug,
       type: knowledgeNodes.type,
@@ -921,13 +983,16 @@ export async function searchNodes(
 export async function semanticSearch(
   workspaceId: string,
   queryEmbedding: number[],
-  filters?: { type?: string; source?: string; tags?: string[] }
+  filters?: { type?: string; source?: string; tags?: string[]; tenantId?: string | null }
 ): Promise<KnowledgeNode[]> {
   const vectorStr = `[${queryEmbedding.join(",")}]`;
   const conditions = [
     eq(knowledgeNodes.workspaceId, workspaceId),
     sql`${knowledgeNodes.embedding} IS NOT NULL`,
   ];
+
+  if (filters?.tenantId === null) conditions.push(isNull(knowledgeNodes.tenantId));
+  else if (filters?.tenantId) conditions.push(eq(knowledgeNodes.tenantId, filters.tenantId));
 
   if (filters?.type) conditions.push(eq(knowledgeNodes.type, filters.type));
   if (filters?.source) conditions.push(eq(knowledgeNodes.source, filters.source));
@@ -949,7 +1014,7 @@ export async function hybridSearch(
   workspaceId: string,
   query: string,
   queryEmbedding: number[] | null,
-  filters?: { type?: string; source?: string; tags?: string[] }
+  filters?: { type?: string; source?: string; tags?: string[]; tenantId?: string | null }
 ): Promise<KnowledgeNode[]> {
   const textResults = await searchNodes(workspaceId, query, filters);
 
@@ -982,12 +1047,23 @@ export async function hybridSearch(
     .map((s) => s.node);
 }
 
-export async function getOverview(workspaceId: string, filters?: { source?: string }) {
+export async function getOverview(
+  workspaceId: string,
+  filters?: { source?: string; tenantId?: string | null }
+) {
   const nodeConditions = [eq(knowledgeNodes.workspaceId, workspaceId)];
   const sourceBreakdownConditions = [
     eq(knowledgeNodes.workspaceId, workspaceId),
     sql`${knowledgeNodes.source} IS NOT NULL`,
   ];
+
+  if (filters?.tenantId === null) {
+    nodeConditions.push(isNull(knowledgeNodes.tenantId));
+    sourceBreakdownConditions.push(isNull(knowledgeNodes.tenantId));
+  } else if (filters?.tenantId) {
+    nodeConditions.push(eq(knowledgeNodes.tenantId, filters.tenantId));
+    sourceBreakdownConditions.push(eq(knowledgeNodes.tenantId, filters.tenantId));
+  }
 
   if (filters?.source) {
     nodeConditions.push(eq(knowledgeNodes.source, filters.source));
@@ -1049,7 +1125,7 @@ export async function createEdge(data: {
   relationship: string;
   weight?: number;
   autoGenerated?: boolean;
-  via?: "web" | "mcp" | "cli";
+  via?: "web" | "mcp" | "cli" | "api";
   actorUserId?: string;
 }): Promise<KnowledgeEdge | null> {
   if (

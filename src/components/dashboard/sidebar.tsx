@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { usePlatform } from "@/contexts/platform-context";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { WorkspaceSwitcher } from "@/components/workspace/workspace-switcher";
@@ -17,9 +18,15 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   HelpCircle,
+  Building2,
+  Users,
+  Key,
+  BarChart3,
+  BookOpen,
+  Layers,
 } from "lucide-react";
 
-const navItems = [
+const personalNavItems = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/knowledge", label: "Knowledge", icon: FileText },
   { href: "/graph", label: "Graph", icon: GitFork },
@@ -27,10 +34,20 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+const platformNavItems = [
+  { href: "/platform", label: "Overview", icon: LayoutDashboard },
+  { href: "/platform/workspaces", label: "Workspaces", icon: Layers },
+  { href: "/platform/tenants", label: "Tenants", icon: Users },
+  { href: "/platform/keys", label: "API Keys", icon: Key },
+  { href: "/platform/usage", label: "Usage", icon: BarChart3 },
+  { href: "/docs", label: "Docs", icon: BookOpen },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { isPlatformEnabled, mode, setMode } = usePlatform();
   const [collapsed, setCollapsed] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -50,8 +67,11 @@ export function Sidebar() {
   }
 
   const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+    href === "/" || href === "/platform"
+      ? pathname === href
+      : pathname.startsWith(href);
 
+  const navItems = mode === "platform" ? platformNavItems : personalNavItems;
   const photoURL = user?.photoURL;
 
   return (
@@ -69,7 +89,7 @@ export function Sidebar() {
         className="flex items-center justify-between h-14 px-4 shrink-0"
         style={{ borderBottom: "1px solid var(--neo-border)" }}
       >
-        <Link href="/" className="flex items-center gap-2 overflow-hidden min-w-0">
+        <Link href={mode === "platform" ? "/platform" : "/"} className="flex items-center gap-2 overflow-hidden min-w-0">
           <AnimatePresence mode="wait">
             {!collapsed ? (
               <motion.div key="full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col leading-none">
@@ -94,10 +114,57 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Workspace switcher */}
-      <div className={`px-3 pt-3 ${collapsed ? "flex justify-center" : ""}`}>
-        <WorkspaceSwitcher collapsed={collapsed} />
-      </div>
+      {/* Mode switcher */}
+      {isPlatformEnabled && !collapsed && (
+        <div className="px-3 pt-3">
+          <div
+            className="flex rounded-lg p-0.5"
+            style={{ background: "var(--neo-surface2)", border: "1px solid var(--neo-border)" }}
+          >
+            {(["personal", "platform"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => {
+                  setMode(m);
+                  router.push(m === "platform" ? "/platform" : "/");
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition-colors capitalize"
+                style={{
+                  background: mode === m ? "var(--neo-surface-hover)" : "transparent",
+                  color: mode === m ? "var(--neo-fg)" : "var(--neo-fg-muted)",
+                }}
+              >
+                {m === "platform" && <Building2 size={12} />}
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isPlatformEnabled && collapsed && (
+        <div className="px-3 pt-3 flex justify-center">
+          <button
+            onClick={() => {
+              const next = mode === "personal" ? "platform" : "personal";
+              setMode(next);
+              router.push(next === "platform" ? "/platform" : "/");
+            }}
+            className="p-2 rounded-md transition-colors"
+            style={{ color: "var(--neo-fg-muted)", background: "var(--neo-surface2)" }}
+            title={mode === "personal" ? "Switch to Platform" : "Switch to Personal"}
+          >
+            <Building2 size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Workspace switcher — personal mode only */}
+      {mode === "personal" && (
+        <div className={`px-3 pt-3 ${collapsed ? "flex justify-center" : ""}`}>
+          <WorkspaceSwitcher collapsed={collapsed} />
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-3 space-y-1">
@@ -142,7 +209,6 @@ export function Sidebar() {
 
       {/* Bottom */}
       <div className="px-3 py-3 space-y-1 shrink-0" style={{ borderTop: "1px solid var(--neo-border)" }}>
-        {/* Support */}
         <a
           href="mailto:support@nura.sh"
           className="flex items-center gap-3.5 rounded-lg px-3 py-2.5 text-[15px] transition-colors"
@@ -159,7 +225,6 @@ export function Sidebar() {
           </AnimatePresence>
         </a>
 
-        {/* User + theme */}
         {user && (
           <div className={`flex items-center gap-3 rounded-lg py-2.5 overflow-hidden ${collapsed ? "justify-center px-0" : "px-3"}`}>
             {photoURL ? (

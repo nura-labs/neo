@@ -23,7 +23,17 @@ export async function GET(request: Request) {
   try {
     const user = await getAuthenticatedUser(request);
     const list = await listWorkspacesForUser(user.id);
-    return NextResponse.json({ workspaces: list });
+    return NextResponse.json({
+      workspaces: list.map((w) => ({
+        id: w.id,
+        slug: w.slug,
+        name: w.name,
+        plan: w.plan,
+        scope: w.scope,
+        role: w.role,
+        memberCount: w.memberCount,
+      })),
+    });
   } catch {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

@@ -12,6 +12,10 @@ interface Props {
 export function WorkspaceSwitcher({ collapsed = false }: Props) {
   const { workspaces, currentWorkspace, setCurrentWorkspaceSlug } = useAuth();
 
+  const personalWorkspaces = workspaces.filter(
+    (w) => !w.scope || w.scope === "personal"
+  );
+
   // Hard reload on switch — dashboard pages fetch data in useEffect with
   // empty deps, so a soft state change leaves stale numbers on screen
   // (issue: user switched to empty workspace but saw 49 nodes from previous).
@@ -41,7 +45,12 @@ export function WorkspaceSwitcher({ collapsed = false }: Props) {
 
   if (!currentWorkspace) return null;
 
-  const initials = currentWorkspace.name
+  const activeWorkspace =
+    personalWorkspaces.find((w) => w.slug === currentWorkspace.slug) ??
+    personalWorkspaces[0] ??
+    currentWorkspace;
+
+  const initials = activeWorkspace.name
     .split(" ")
     .map((s) => s[0])
     .join("")
@@ -61,8 +70,8 @@ export function WorkspaceSwitcher({ collapsed = false }: Props) {
           </button>
           {open && (
             <SwitcherMenu
-              workspaces={workspaces}
-              current={currentWorkspace}
+              workspaces={personalWorkspaces}
+              current={activeWorkspace}
               onPick={pickWorkspace}
               onCreate={() => {
                 setOpen(false);
@@ -88,14 +97,14 @@ export function WorkspaceSwitcher({ collapsed = false }: Props) {
             {initials}
           </span>
           <span className="flex-1 truncate font-medium">
-            {currentWorkspace.name}
+            {activeWorkspace.name}
           </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
         {open && (
           <SwitcherMenu
-            workspaces={workspaces}
-            current={currentWorkspace}
+            workspaces={personalWorkspaces}
+            current={activeWorkspace}
             onPick={pickWorkspace}
             onCreate={() => {
               setOpen(false);

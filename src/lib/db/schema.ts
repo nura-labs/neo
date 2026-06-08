@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   real,
   boolean,
+  integer,
   customType,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -43,6 +44,115 @@ export const users = pgTable("users", {
 // The workspace is the tenant. A user can be a member of many workspaces.
 // Solo workspace = 1 member. Shared workspace = 2+.
 
+export const platformOrgs = pgTable(
+  "platform_orgs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    plan: text("plan").notNull().default("free"),
+    enabledAt: timestamp("enabled_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("platform_orgs_slug_idx").on(table.slug)]
+);
+
+export const tenants = pgTable(
+  "tenants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    platformOrgId: uuid("platform_org_id")
+      .notNull()
+      .references(() => platformOrgs.id, { onDelete: "cascade" }),
+    externalId: text("external_id").notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("tenants_org_external_idx").on(table.platformOrgId, table.externalId),
+    uniqueIndex("tenants_org_slug_idx").on(table.platformOrgId, table.slug),
+    index("tenants_org_idx").on(table.platformOrgId),
+  ]
+);
+
+export const accountApiTokens = pgTable(
+  "account_api_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    platformOrgId: uuid("platform_org_id")
+      .notNull()
+      .references(() => platformOrgs.id, { onDelete: "cascade" }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenPrefix: text("token_prefix").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    scopes: text("scopes")
+      .array()
+      .notNull()
+      .default(sql`'{"read","write"}'::text[]`),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("account_api_tokens_org_idx").on(table.platformOrgId),
+    index("account_api_tokens_hash_idx").on(table.tokenHash),
+  ]
+);
+
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    platformOrgId: uuid("platform_org_id").references(() => platformOrgs.id, {
+      onDelete: "set null",
+    }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "set null",
+    }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    surface: text("surface").notNull(), // 'personal' | 'platform'
+    operation: text("operation").notNull(),
+    via: text("via").notNull().default("web"), // web | mcp | cli | api
+    billable: boolean("billable").notNull().default(true),
+    units: integer("units").notNull().default(1),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("usage_events_org_created_idx").on(table.platformOrgId, table.createdAt),
+    index("usage_events_workspace_created_idx").on(table.workspaceId, table.createdAt),
+    index("usage_events_tenant_created_idx").on(table.tenantId, table.createdAt),
+    index("usage_events_surface_created_idx").on(table.surface, table.createdAt),
+  ]
+);
+
+export const usageLimits = pgTable("usage_limits", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  platformOrgId: uuid("platform_org_id").references(() => platformOrgs.id, {
+    onDelete: "cascade",
+  }),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+    onDelete: "cascade",
+  }),
+  surface: text("surface").notNull(),
+  operation: text("operation"),
+  limitUnits: integer("limit_units"),
+  period: text("period").notNull().default("monthly"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const workspaces = pgTable(
   "workspaces",
   {
@@ -50,13 +160,21 @@ export const workspaces = pgTable(
     slug: text("slug").notNull().unique(),
     name: text("name").notNull(),
     plan: text("plan").notNull().default("free"),
+    scope: text("scope").notNull().default("personal"), // 'personal' | 'platform'
+    platformOrgId: uuid("platform_org_id").references(() => platformOrgs.id, {
+      onDelete: "cascade",
+    }),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index("workspaces_created_by_idx").on(table.createdByUserId)]
+  (table) => [
+    index("workspaces_created_by_idx").on(table.createdByUserId),
+    index("workspaces_platform_org_idx").on(table.platformOrgId),
+    index("workspaces_scope_idx").on(table.scope),
+  ]
 );
 
 export const memberships = pgTable(
@@ -220,6 +338,7 @@ export const activityEvents = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
     actorUserId: uuid("actor_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -255,6 +374,7 @@ export const knowledgeNodes = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "set null" }),
@@ -274,6 +394,7 @@ export const knowledgeNodes = pgTable(
   },
   (table) => [
     index("knowledge_nodes_workspace_idx").on(table.workspaceId),
+    index("knowledge_nodes_workspace_tenant_idx").on(table.workspaceId, table.tenantId),
     index("knowledge_nodes_workspace_type_idx").on(table.workspaceId, table.type),
     index("knowledge_nodes_workspace_source_idx").on(table.workspaceId, table.source),
     uniqueIndex("knowledge_nodes_workspace_slug_idx").on(table.workspaceId, table.slug),
@@ -294,6 +415,7 @@ export const knowledgeEdges = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
     relationship: text("relationship").notNull(),
     weight: real("weight").notNull().default(1.0),
     autoGenerated: boolean("auto_generated").notNull().default(false),
@@ -362,6 +484,7 @@ export const dreamSuggestions = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
     type: text("type").notNull(), // "edge_suggestion" | "contradiction" | "orphan"
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     status: text("status").notNull().default("pending"), // "pending" | "accepted" | "dismissed"
@@ -390,3 +513,14 @@ export type DreamSuggestion = typeof dreamSuggestions.$inferSelect;
 export type NewDreamSuggestion = typeof dreamSuggestions.$inferInsert;
 
 export type Role = "owner" | "member";
+export type WorkspaceScope = "personal" | "platform";
+export type UsageSurface = "personal" | "platform";
+
+export type PlatformOrg = typeof platformOrgs.$inferSelect;
+export type NewPlatformOrg = typeof platformOrgs.$inferInsert;
+export type Tenant = typeof tenants.$inferSelect;
+export type NewTenant = typeof tenants.$inferInsert;
+export type AccountApiToken = typeof accountApiTokens.$inferSelect;
+export type NewAccountApiToken = typeof accountApiTokens.$inferInsert;
+export type UsageEvent = typeof usageEvents.$inferSelect;
+export type NewUsageEvent = typeof usageEvents.$inferInsert;

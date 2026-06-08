@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
+import { PlatformProvider } from "@/contexts/platform-context";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
@@ -33,9 +34,11 @@ export default function DashboardLayout({
   if (!user) return null;
 
   return (
-    <div className="flex h-screen" style={{ background: "var(--neo-bg)" }}>
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto p-6">{children}</main>
-    </div>
+    <PlatformProvider>
+      <div className="flex h-screen" style={{ background: "var(--neo-bg)" }}>
+        <Sidebar />
+        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+      </div>
+    </PlatformProvider>
   );
 }
