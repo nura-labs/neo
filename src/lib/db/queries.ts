@@ -607,7 +607,7 @@ export async function createNode(
 ): Promise<KnowledgeNode> {
   const { relatedTo, ...nodeData } = input;
 
-  const slug = await generateUniqueSlug(workspaceId, nodeData.title, tenantId);
+  const slug = await generateUniqueSlug(workspaceId, nodeData.title, tenantId ?? null);
 
   const [node] = await db
     .insert(knowledgeNodes)
